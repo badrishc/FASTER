@@ -138,41 +138,41 @@ namespace FASTER.test.async
         }
 
         // Read functions
-        public void SingleReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst)
+        public void SingleReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst, long logicalAddress)
         {
             dst.value = value;
         }
 
-        public void ConcurrentReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst)
+        public void ConcurrentReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst, long logicalAddress)
         {
             dst.value = value;
         }
 
         // Upsert functions
-        public void SingleWriter(ref AdId key, ref NumClicks src, ref NumClicks dst)
+        public void SingleWriter(ref AdId key, ref NumClicks src, ref NumClicks dst, long logicalAddress)
         {
             dst = src;
         }
 
-        public bool ConcurrentWriter(ref AdId key, ref NumClicks src, ref NumClicks dst)
+        public bool ConcurrentWriter(ref AdId key, ref NumClicks src, ref NumClicks dst, long logicalAddress)
         {
             dst = src;
             return true;
         }
 
         // RMW functions
-        public void InitialUpdater(ref AdId key, ref AdInput input, ref NumClicks value)
+        public void InitialUpdater(ref AdId key, ref AdInput input, ref NumClicks value, long logicalAddress)
         {
             value = input.numClicks;
         }
 
-        public bool InPlaceUpdater(ref AdId key, ref AdInput input, ref NumClicks value)
+        public bool InPlaceUpdater(ref AdId key, ref AdInput input, ref NumClicks value, long logicalAddress)
         {
             Interlocked.Add(ref value.numClicks, input.numClicks.numClicks);
             return true;
         }
 
-        public void CopyUpdater(ref AdId key, ref AdInput input, ref NumClicks oldValue, ref NumClicks newValue)
+        public void CopyUpdater(ref AdId key, ref AdInput input, ref NumClicks oldValue, ref NumClicks newValue, long oldLogicalAddress, long newLogicalAddress)
         {
             newValue.numClicks += oldValue.numClicks + input.numClicks.numClicks;
         }

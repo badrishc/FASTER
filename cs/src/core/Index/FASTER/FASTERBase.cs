@@ -10,70 +10,77 @@ using System.Threading;
 
 namespace FASTER.core
 {
-    internal static class Constants
+    /// <summary>
+    /// Constants (mostly internal) for FASTER
+    /// </summary>
+    public static class Constants
     {
         /// Size of cache line in bytes
-        public const int kCacheLineBytes = 64;
+        internal const int kCacheLineBytes = 64;
 
-        public const bool kFineGrainedHandoverRecord = false;
+        internal const bool kFineGrainedHandoverRecord = false;
 
-        public const bool kFineGrainedHandoverBucket = true;
+        internal const bool kFineGrainedHandoverBucket = true;
 
         /// Number of entries per bucket (assuming 8-byte entries to fill a cacheline)
         /// Number of bits per bucket (assuming 8-byte entries to fill a cacheline)
-        public const int kBitsPerBucket = 3;
+        internal const int kBitsPerBucket = 3;
 
-        public const int kEntriesPerBucket = 1 << kBitsPerBucket;
+        internal const int kEntriesPerBucket = 1 << kBitsPerBucket;
 
         // Position of fields in hash-table entry
-        public const int kTentativeBitShift = 63;
+        internal const int kTentativeBitShift = 63;
 
-        public const long kTentativeBitMask = (1L << kTentativeBitShift);
+        internal const long kTentativeBitMask = (1L << kTentativeBitShift);
 
-        public const int kPendingBitShift = 62;
+        internal const int kPendingBitShift = 62;
 
-        public const long kPendingBitMask = (1L << kPendingBitShift);
+        internal const long kPendingBitMask = (1L << kPendingBitShift);
 
-        public const int kReadCacheBitShift = 47;
-        public const long kReadCacheBitMask = (1L << kReadCacheBitShift);
+        internal const int kReadCacheBitShift = 47;
+        internal const long kReadCacheBitMask = (1L << kReadCacheBitShift);
 
-        public const int kTagSize = 14;
+        internal const int kTagSize = 14;
 
-        public const int kTagShift = 62 - kTagSize;
+        internal const int kTagShift = 62 - kTagSize;
 
-        public const long kTagMask = (1L << kTagSize) - 1;
+        internal const long kTagMask = (1L << kTagSize) - 1;
 
-        public const long kTagPositionMask = (kTagMask << kTagShift);
+        internal const long kTagPositionMask = (kTagMask << kTagShift);
 
-        public const long kAddressMask = (1L << 48) - 1;
+        internal const long kAddressMask = (1L << 48) - 1;
 
         // Position of tag in hash value (offset is always in the least significant bits)
-        public const int kHashTagShift = 64 - kTagSize;
+        internal const int kHashTagShift = 64 - kTagSize;
 
 
         /// Invalid entry value
-        public const int kInvalidEntrySlot = kEntriesPerBucket;
+        internal const int kInvalidEntrySlot = kEntriesPerBucket;
 
         /// Location of the special bucket entry
-        public const long kOverflowBucketIndex = kEntriesPerBucket - 1;
+        internal const long kOverflowBucketIndex = kEntriesPerBucket - 1;
 
         /// Invalid value in the hash table
-        public const long kInvalidEntry = 0;
+        internal const long kInvalidEntry = 0;
 
         /// Number of times to retry a compare-and-swap before failure
-        public const long kRetryThreshold = 1000000;
+        internal const long kRetryThreshold = 1000000;
 
         /// Number of merge/split chunks.
-        public const int kNumMergeChunkBits = 8;
-        public const int kNumMergeChunks = 1 << kNumMergeChunkBits;
+        internal const int kNumMergeChunkBits = 8;
+        internal const int kNumMergeChunks = 1 << kNumMergeChunkBits;
 
         // Size of chunks for garbage collection
-        public const int kSizeofChunkBits = 14;
-        public const int kSizeofChunk = 1 << 14;
+        internal const int kSizeofChunkBits = 14;
+        internal const int kSizeofChunk = 1 << 14;
 
+        /// <summary>
+        /// Invalid Logical Address
+        /// </summary>
         public const long kInvalidAddress = 0;
-        public const long kTempInvalidAddress = 1;
-        public const int kFirstValidAddress = 64;
+
+        internal const long kTempInvalidAddress = 1;
+        internal const int kFirstValidAddress = 64;
     }
 
     [StructLayout(LayoutKind.Explicit, Size = Constants.kEntriesPerBucket * 8)]
@@ -256,9 +263,6 @@ namespace FASTER.core
 
         // Used as an atomic counter to check if resizing is complete
         internal long numPendingChunksToBeSplit;
-
-        // Epoch set for resizing
-        internal int resizeEpoch;
 
         internal LightEpoch epoch;
 

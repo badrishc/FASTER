@@ -223,7 +223,7 @@ namespace FASTER.core
         /// </summary>
         internal IObserver<IFasterScanIterator<Key, Value>> OnReadOnlyObserver;
 
-        #region Abstract methods
+#region Abstract methods
         /// <summary>
         /// Initialize
         /// </summary>
@@ -471,7 +471,7 @@ namespace FASTER.core
         /// <returns></returns>
         public abstract IFasterScanIterator<Key, Value> Scan(long beginAddress, long endAddress, ScanBufferingMode scanBufferingMode = ScanBufferingMode.DoublePageBuffering);
 
-        #endregion
+#endregion
 
 
         /// <summary>
@@ -749,7 +749,7 @@ namespace FASTER.core
             int page = localTailPageOffset.Page;
             int offset = localTailPageOffset.Offset - numSlots;
 
-            #region HANDLE PAGE OVERFLOW
+#region HANDLE PAGE OVERFLOW
             if (localTailPageOffset.Offset > PageSize)
             {
                 if (offset > PageSize)
@@ -787,7 +787,7 @@ namespace FASTER.core
 
                 return 0;
             }
-            #endregion
+#endregion
 
             return (((long)page) << LogPageSizeBits) | ((long)offset);
         }

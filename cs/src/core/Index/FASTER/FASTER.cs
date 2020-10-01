@@ -60,6 +60,11 @@ namespace FASTER.core
         /// </summary>
         public LogAccessor<Key, Value> ReadCache { get; }
 
+        /// <summary>
+        /// An accessor to the record at a given logical address, for use in IFunctions callbacks.
+        /// </summary>
+        public RecordAccessor<Key, Value> RecordAccessor { get; }
+
         internal ConcurrentDictionary<string, CommitPoint> _recoveredSessions;
 
         /// <summary>
@@ -96,6 +101,8 @@ namespace FASTER.core
                     this.comparer = FasterEqualityComparer.Get<Key>();
                 }
             }
+
+            this.RecordAccessor = new RecordAccessor<Key, Value>(this);
 
             if (checkpointSettings == null)
                 checkpointSettings = new CheckpointSettings();

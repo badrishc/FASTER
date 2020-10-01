@@ -322,7 +322,7 @@ namespace FASTER.core
             }
         }
 
-        internal void InternalCompletePendingRequest<Input, Output, Context, FasterSession>(
+        internal unsafe void InternalCompletePendingRequest<Input, Output, Context, FasterSession>(
             FasterExecutionContext<Input, Output, Context> opCtx, 
             FasterExecutionContext<Input, Output, Context> currentCtx, 
             FasterSession fasterSession, 
@@ -370,11 +370,14 @@ namespace FASTER.core
 
                     if (pendingContext.type == OperationType.READ)
                     {
-                        fasterSession.ReadCompletionCallback(ref key,
+                        // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
+                        fasterSession.ReadCompletionCallback(ref pendingContext.operationFlags.HasFlag(OperationFlags.SkipKeyVerification) ? ref hlog.GetContextRecordKey(ref request) : ref key,
                                                          ref pendingContext.input,
                                                          ref pendingContext.output,
                                                          pendingContext.userContext,
-                                                         status);
+                                                         status,
+                                                         hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).PreviousAddress
+                                                         );
                     }
                     else
                     {
@@ -388,7 +391,7 @@ namespace FASTER.core
             }
         }
 
-        internal (Status, Output) InternalCompletePendingReadRequest<Input, Output, Context, FasterSession>(
+        internal unsafe (Status, Output) InternalCompletePendingReadRequest<Input, Output, Context, FasterSession>(
             FasterExecutionContext<Input, Output, Context> opCtx, 
             FasterExecutionContext<Input, Output, Context> currentCtx, 
             FasterSession fasterSession, 
@@ -418,11 +421,13 @@ namespace FASTER.core
             if (pendingContext.heldLatch == LatchOperation.Shared)
                 ReleaseSharedLatch(key);
 
-            fasterSession.ReadCompletionCallback(ref key,
+            // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
+            fasterSession.ReadCompletionCallback(ref pendingContext.operationFlags.HasFlag(OperationFlags.SkipKeyVerification) ? ref hlog.GetContextRecordKey(ref request) : ref key,
                                              ref pendingContext.input,
                                              ref pendingContext.output,
                                              pendingContext.userContext,
-                                             status);
+                                             status,
+                                             hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).PreviousAddress);
 
             s.Item1 = status;
             s.Item2 = pendingContext.output;

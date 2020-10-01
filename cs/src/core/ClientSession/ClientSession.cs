@@ -21,7 +21,7 @@ namespace FASTER.core
     /// <typeparam name="Output"></typeparam>
     /// <typeparam name="Context"></typeparam>
     /// <typeparam name="Functions"></typeparam>
-    public sealed class ClientSession<Key, Value, Input, Output, Context, Functions> : IClientSession, IDisposable
+    public sealed partial class ClientSession<Key, Value, Input, Output, Context, Functions> : IClientSession, IClientSession<Key, Value, Input, Output, Context, Functions>
         where Functions : IFunctions<Key, Value, Input, Output, Context>
     {
         private readonly FasterKV<Key, Value> fht;
@@ -69,9 +69,7 @@ namespace FASTER.core
                 UnsafeResumeThread();
         }
 
-        /// <summary>
-        /// Get session ID
-        /// </summary>
+        /// <inheritdoc/>
         public string ID { get { return ctx.guid; } }
 
         /// <summary>
@@ -86,15 +84,7 @@ namespace FASTER.core
                 UnsafeSuspendThread();
         }
 
-        /// <summary>
-        /// Read operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <param name="output"></param>
-        /// <param name="userContext"></param>
-        /// <param name="serialNo"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status Read(ref Key key, ref Input input, ref Output output, Context userContext, long serialNo)
         {
@@ -109,52 +99,55 @@ namespace FASTER.core
             }
         }
 
-        /// <summary>
-        /// Read operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="output"></param>
-        /// <param name="userContext"></param>
-        /// <param name="serialNo"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status Read(ref Key key, ref Output output, Context userContext = default, long serialNo = 0)
         {
             Input input = default;
+            return this.Read(ref key, ref input, ref output, userContext, serialNo);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Status Read(ref Key key, ref Input input, ref Output output, ref long previousAddress, bool skipKeyVerification = false, Context userContext = default, long serialNo = 0)
+        {
             if (SupportAsync) UnsafeResumeThread();
             try
             {
-                return fht.ContextRead(ref key, ref input, ref output, userContext, FasterSession, serialNo, ctx);
+                if (previousAddress != Constants.kInvalidAddress)
+                {
+                    this.ctx.readAddress = previousAddress;
+                    this.ctx.operationFlags = skipKeyVerification ? FasterKV<Key, Value>.OperationFlags.SkipKeyVerification : FasterKV<Key, Value>.OperationFlags.None;
+                }
+                var status = fht.ContextRead(ref key, ref input, ref output, userContext, FasterSession, serialNo, ctx);
+                if (status == Status.OK)
+                    previousAddress = this.ctx.readAddress;
+                return status;
             }
             finally
             {
+                this.ctx.readAddress = Constants.kInvalidAddress;
+                this.ctx.operationFlags = FasterKV<Key, Value>.OperationFlags.None;
                 if (SupportAsync) UnsafeSuspendThread();
             }
         }
 
-        /// <summary>
-        /// Async read operation, may return uncommitted result
-        /// To ensure reading of committed result, complete the read and then call WaitForCommitAsync.
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <param name="context"></param>
-        /// <param name="token"></param>
-        /// <returns>ReadAsyncResult - call CompleteRead on the return value to complete the read operation</returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, Context context = default, CancellationToken token = default)
         {
-            return fht.ReadAsync(this, ref key, ref input, context, token);
+            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, skipKeyVerification: false, context, token);
         }
 
-        /// <summary>
-        /// Upsert operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="desiredValue"></param>
-        /// <param name="userContext"></param>
-        /// <param name="serialNo"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, long startAddress, bool skipKeyVerification = false,
+                                                                                                            Context context = default, CancellationToken token = default)
+        {
+            return fht.ReadAsync(this, ref key, ref input, startAddress, skipKeyVerification, context, token);
+        }
+
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status Upsert(ref Key key, ref Value desiredValue, Context userContext = default, long serialNo = 0)
         {
@@ -169,15 +162,7 @@ namespace FASTER.core
             }
         }
 
-        /// <summary>
-        /// Upsert operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="desiredValue"></param>
-        /// <param name="context"></param>
-        /// <param name="waitForCommit"></param>
-        /// <param name="token"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask UpsertAsync(ref Key key, ref Value desiredValue, Context context = default, bool waitForCommit = false, CancellationToken token = default)
         {
@@ -197,14 +182,7 @@ namespace FASTER.core
                 await @this.WaitForCommitAsync(token);
         }
 
-        /// <summary>
-        /// RMW operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <param name="userContext"></param>
-        /// <param name="serialNo"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status RMW(ref Key key, ref Input input, Context userContext, long serialNo)
         {
@@ -219,36 +197,11 @@ namespace FASTER.core
             }
         }
 
-        /// <summary>
-        /// RMW operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status RMW(ref Key key, ref Input input)
-        {
-            if (SupportAsync) UnsafeResumeThread();
-            try
-            {
-                return fht.ContextRMW(ref key, ref input, default, FasterSession, 0, ctx);
-            }
-            finally
-            {
-                if (SupportAsync) UnsafeSuspendThread();
-            }
-        }
+        public Status RMW(ref Key key, ref Input input) => this.RMW(ref key, ref input, default, 0);
 
-        /// <summary>
-        /// Async RMW operation
-        /// Await operation in session before issuing next one
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <param name="context"></param>
-        /// <param name="waitForCommit"></param>
-        /// <param name="token"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask RMWAsync(ref Key key, ref Input input, Context context = default, bool waitForCommit = false, CancellationToken token = default)
         {
@@ -269,13 +222,7 @@ namespace FASTER.core
                 await @this.WaitForCommitAsync(token);
         }
 
-        /// <summary>
-        /// Delete operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="userContext"></param>
-        /// <param name="serialNo"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status Delete(ref Key key, Context userContext, long serialNo)
         {
@@ -290,33 +237,14 @@ namespace FASTER.core
             }
         }
 
-        /// <summary>
-        /// Delete operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status Delete(ref Key key)
         {
-            if (SupportAsync) UnsafeResumeThread();
-            try
-            {
-                return fht.ContextDelete(ref key, default, FasterSession, 0, ctx);
-            }
-            finally
-            {
-                if (SupportAsync) UnsafeSuspendThread();
-            }
+                return this.Delete(ref key, default, 0);
         }
 
-        /// <summary>
-        /// Async delete operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="waitForCommit"></param>
-        /// <param name="context"></param>
-        /// <param name="token"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask DeleteAsync(ref Key key, Context context = default, bool waitForCommit = false, CancellationToken token = default)
         {
@@ -351,10 +279,7 @@ namespace FASTER.core
             return fht.InternalContainsKeyInMemory(ref key, ctx, FasterSession, fromAddress);
         }
 
-        /// <summary>
-        /// Get list of pending requests (for current session)
-        /// </summary>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public IEnumerable<long> GetPendingRequests()
         {
             foreach (var kvp in ctx.prevCtx?.ioPendingRequests)
@@ -370,10 +295,7 @@ namespace FASTER.core
                 yield return val.serialNum;
         }
 
-        /// <summary>
-        /// Refresh session epoch and handle checkpointing phases. Used only
-        /// in case of thread-affinitized sessions (async support is disabled).
-        /// </summary>
+        /// <inheritdoc/>
         public void Refresh()
         {
             if (SupportAsync) UnsafeResumeThread();
@@ -381,13 +303,7 @@ namespace FASTER.core
             if (SupportAsync) UnsafeSuspendThread();
         }
 
-        /// <summary>
-        /// Sync complete all outstanding pending operations
-        /// Async operations (ReadAsync) must be completed individually
-        /// </summary>
-        /// <param name="spinWait">Spin-wait for all pending operations on session to complete</param>
-        /// <param name="spinWaitForCommit">Extend spin-wait until ongoing commit/checkpoint, if any, completes</param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public bool CompletePending(bool spinWait = false, bool spinWaitForCommit = false)
         {
             if (SupportAsync) UnsafeResumeThread();
@@ -418,11 +334,7 @@ namespace FASTER.core
             }
         }
 
-        /// <summary>
-        /// Complete all outstanding pending operations asynchronously
-        /// Async operations (ReadAsync) must be completed individually
-        /// </summary>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public async ValueTask CompletePendingAsync(bool waitForCommit = false, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
@@ -438,12 +350,7 @@ namespace FASTER.core
                 await WaitForCommitAsync(token);
         }
 
-        /// <summary>
-        /// Check if at least one request is ready for CompletePending to be called on
-        /// Returns completed immediately if there are no outstanding requests
-        /// </summary>
-        /// <param name="token"></param>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public async ValueTask ReadyToCompletePendingAsync(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
@@ -454,11 +361,7 @@ namespace FASTER.core
             await fht.ReadyToCompletePendingAsync(this, token);
         }
 
-        /// <summary>
-        /// Wait for commit of all operations completed until the current point in session.
-        /// Does not itself issue checkpoint/commits.
-        /// </summary>
-        /// <returns></returns>
+        /// <inheritdoc/>
         public async ValueTask WaitForCommitAsync(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
@@ -549,7 +452,7 @@ namespace FASTER.core
         }
 
         // This is a struct to allow JIT to inline calls (and bypass default interface call mechanism)
-        internal struct AsyncFasterSession : IFasterSession<Key, Value, Input, Output, Context>
+        internal struct AsyncFasterSession : IFasterSession<Key, Value, Input, Output, Context>, IFunctions<Key, Value, Input, Output, Context>
         {
             private readonly ClientSession<Key, Value, Input, Output, Context, Functions> _clientSession;
 
@@ -564,80 +467,50 @@ namespace FASTER.core
                 _clientSession.LatestCommitPoint = commitPoint;
             }
 
-            public void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst)
-            {
-                _clientSession.functions.ConcurrentReader(ref key, ref input, ref value, ref dst);
-            }
+            public void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress) 
+                => _clientSession.functions.ConcurrentReader(ref key, ref input, ref value, ref dst, logicalAddress);
 
-            public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst)
-            {
-                return _clientSession.functions.ConcurrentWriter(ref key, ref src, ref dst);
-            }
+            public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) 
+                => _clientSession.functions.ConcurrentWriter(ref key, ref src, ref dst, logicalAddress);
 
-            public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue)
-            {
-                _clientSession.functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue);
-            }
+            public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress) 
+                => _clientSession.functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue, oldLogicalAddress, newLogicalAddress);
 
-            public void DeleteCompletionCallback(ref Key key, Context ctx)
-            {
-                _clientSession.functions.DeleteCompletionCallback(ref key, ctx);
-            }
+            public void DeleteCompletionCallback(ref Key key, Context ctx) 
+                => _clientSession.functions.DeleteCompletionCallback(ref key, ctx);
 
             public int GetInitialLength(ref Input input)
-            {
-                return _clientSession.variableLengthStruct.GetInitialLength(ref input);
-            }
+                => _clientSession.variableLengthStruct.GetInitialLength(ref input);
 
-            public int GetLength(ref Value t, ref Input input)
-            {
-                return _clientSession.variableLengthStruct.GetLength(ref t, ref input);
-            }
+            public int GetLength(ref Value t, ref Input input) 
+                => _clientSession.variableLengthStruct.GetLength(ref t, ref input);
 
-            public void InitialUpdater(ref Key key, ref Input input, ref Value value)
-            {
-                _clientSession.functions.InitialUpdater(ref key, ref input, ref value);
-            }
+            public void InitialUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) 
+                => _clientSession.functions.InitialUpdater(ref key, ref input, ref value, logicalAddress);
 
-            public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value)
-            {
-                return _clientSession.functions.InPlaceUpdater(ref key, ref input, ref value);
-            }
+            public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) 
+                => _clientSession.functions.InPlaceUpdater(ref key, ref input, ref value, logicalAddress);
 
-            public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status)
-            {
-                _clientSession.functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status);
-            }
+            public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, long previousAddress) 
+                => _clientSession.functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, previousAddress);
 
-            public void RMWCompletionCallback(ref Key key, ref Input input, Context ctx, Status status)
-            {
-                _clientSession.functions.RMWCompletionCallback(ref key, ref input, ctx, status);
-            }
+            public void RMWCompletionCallback(ref Key key, ref Input input, Context ctx, Status status) 
+                => _clientSession.functions.RMWCompletionCallback(ref key, ref input, ctx, status);
 
-            public void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst)
-            {
-                _clientSession.functions.SingleReader(ref key, ref input, ref value, ref dst);
-            }
+            public void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress) 
+                => _clientSession.functions.SingleReader(ref key, ref input, ref value, ref dst, logicalAddress);
 
-            public void SingleWriter(ref Key key, ref Value src, ref Value dst)
-            {
-                _clientSession.functions.SingleWriter(ref key, ref src, ref dst);
-            }
+            public void SingleWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) 
+                => _clientSession.functions.SingleWriter(ref key, ref src, ref dst, logicalAddress);
 
-            public void UnsafeResumeThread()
-            {
-                _clientSession.UnsafeResumeThread();
-            }
+            public void UnsafeResumeThread() 
+                => _clientSession.UnsafeResumeThread();
 
-            public void UnsafeSuspendThread()
-            {
-                _clientSession.UnsafeSuspendThread();
-            }
+            public void UnsafeSuspendThread() 
+                => _clientSession.UnsafeSuspendThread();
 
-            public void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx)
-            {
-                _clientSession.functions.UpsertCompletionCallback(ref key, ref value, ctx);
-            }
+            public void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx) 
+                => _clientSession.functions.UpsertCompletionCallback(ref key, ref value, ctx);
         }
     }
 }

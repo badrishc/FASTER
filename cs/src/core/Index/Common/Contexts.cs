@@ -19,6 +19,11 @@ namespace FASTER.core
         UPSERT,
         INSERT,
         DELETE
+#if PSF_DLL
+        , PSF_READ_KEY
+        , PSF_READ_ADDRESS
+        , PSF_INSERT
+#endif
     }
 
     internal enum OperationStatus
@@ -65,6 +70,12 @@ namespace FASTER.core
 
     public partial class FasterKV<Key, Value> : FasterBase, IFasterKV<Key, Value>
     {
+        [Flags]internal enum OperationFlags : byte
+        {
+            None = 0,
+            SkipKeyVerification = 0x01
+        }
+
         internal struct PendingContext<Input, Output, Context>
         {
             // User provided information
@@ -83,6 +94,7 @@ namespace FASTER.core
             internal long serialNum;
             internal HashBucketEntry entry;
             internal LatchOperation heldLatch;
+            internal OperationFlags operationFlags;
 
             public void Dispose()
             {
@@ -102,6 +114,9 @@ namespace FASTER.core
             public AsyncQueue<AsyncIOContext<Key, Value>> readyResponses;
             public List<long> excludedSerialNos;
             public int asyncPendingCount;
+
+            internal OperationFlags operationFlags;
+            internal long readAddress;
 
             public int SyncIoPendingCount => ioPendingRequests.Count - asyncPendingCount;
 
@@ -177,12 +192,22 @@ namespace FASTER.core
         /// <summary>
         /// Commit tokens per session restored during Continue
         /// </summary>
-        public ConcurrentDictionary<string, CommitPoint> continueTokens;
+#if PSF_DLL
+        internal
+#else
+        public 
+#endif
+        ConcurrentDictionary<string, CommitPoint> continueTokens;
 
         /// <summary>
         /// Commit tokens per session created during Checkpoint
         /// </summary>
-        public ConcurrentDictionary<string, CommitPoint> checkpointTokens;
+#if PSF_DLL
+        internal
+#else
+        public 
+#endif
+        ConcurrentDictionary<string, CommitPoint> checkpointTokens;
 
         /// <summary>
         /// Object log segment offsets

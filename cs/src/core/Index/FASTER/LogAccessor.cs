@@ -55,6 +55,16 @@ namespace FASTER.core
         public long BeginAddress => allocator.BeginAddress;
 
         /// <summary>
+        /// Get a reference to the key of the record at recordInfo
+        /// </summary>
+        public IHeapContainer<Key> GetKeyContainer(ref Key key) => this.allocator.GetKeyContainer(ref key);
+
+        /// <summary>
+        /// Get a reference to the key of the record at recordInfo
+        /// </summary>
+        public IHeapContainer<Value> GetValueContainer(ref Value value) => this.allocator.GetValueContainer(ref value);
+
+        /// <summary>
         /// Truncate the log until, but not including, untilAddress
         /// </summary>
         /// <param name="untilAddress"></param>

@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -107,6 +108,7 @@ namespace FASTER.core
             PendingContext<Input, Output, Context> _pendingContext;
             AsyncIOContext<Key, Value> _diskRequest;
             int CompletionComputeStatus;
+            internal long _previousAddress;
 
             internal ReadAsyncInternal(FasterKV<Key, Value> fasterKV, ClientSession<Key, Value, Input, Output, Context, Functions> clientSession, PendingContext<Input, Output, Context> pendingContext, AsyncIOContext<Key, Value> diskRequest)
             {
@@ -116,6 +118,7 @@ namespace FASTER.core
                 _pendingContext = pendingContext;
                 _diskRequest = diskRequest;
                 CompletionComputeStatus = Pending;
+                _previousAddress = Constants.kInvalidAddress;
             }
 
             internal (Status, Output) CompleteRead()
@@ -134,6 +137,8 @@ namespace FASTER.core
 
                             _result = _fasterKV.InternalCompletePendingReadRequest(
                                 _clientSession.ctx, _clientSession.ctx, _clientSession.FasterSession, _diskRequest, _pendingContext);
+                            _previousAddress = _clientSession.ctx.readAddress;
+                            unsafe { _previousAddress = _fasterKV.hlog.GetInfoFromBytePointer(_diskRequest.record.GetValidPointer()).PreviousAddress; }
                         }
                         finally
                         {
@@ -155,26 +160,37 @@ namespace FASTER.core
                     _exception.Throw();
                 return _result;
             }
+
+            internal (Status, Output) CompleteRead(out long previousAddress)
+            {
+                var result = this.CompleteRead();
+                previousAddress = _previousAddress;
+                return result;
+            }
         }
 
         /// <summary>
         /// State storage for the completion of an async Read, or the result if the read was completed synchronously
         /// </summary>
         public struct ReadAsyncResult<Input, Output, Context, Functions>
-            where Functions : IFunctions<Key, Value, Input, Output, Context>
+        where Functions : IFunctions<Key, Value, Input, Output, Context>
         {
             internal readonly Status status;
             internal readonly Output output;
+            internal readonly long previousAddress;
 
             internal readonly ReadAsyncInternal<Input, Output, Context, Functions> readAsyncInternal;
 
-            internal ReadAsyncResult(Status status, Output output)
+            // Called for synchronously-completed Reads
+            internal ReadAsyncResult(Status status, Output output, long previousAddress)
             {
                 this.status = status;
                 this.output = output;
+                this.previousAddress = previousAddress;
                 this.readAsyncInternal = default;
             }
 
+            // Called for Reads that have gone pending for IO
             internal ReadAsyncResult(
                 FasterKV<Key, Value> fasterKV,
                 ClientSession<Key, Value, Input, Output, Context, Functions> clientSession,
@@ -182,6 +198,7 @@ namespace FASTER.core
             {
                 status = Status.PENDING;
                 output = default;
+                this.previousAddress = Constants.kInvalidAddress;
                 readAsyncInternal = new ReadAsyncInternal<Input, Output, Context, Functions>(fasterKV, clientSession, pendingContext, diskRequest);
             }
 
@@ -196,12 +213,27 @@ namespace FASTER.core
 
                 return readAsyncInternal.CompleteRead();
             }
+
+            /// <summary>
+            /// Complete the read operation, after any I/O is completed.
+            /// </summary>
+            /// <returns>The read result and the previous address in the Read key's hash chain, or throws an exception if error encountered.</returns>
+            public (Status, Output) CompleteRead(out long previousAddress)
+            {
+                if (status != Status.PENDING)
+                {
+                    previousAddress = this.previousAddress;
+                    return (status, output);
+                }
+
+                return readAsyncInternal.CompleteRead(out previousAddress);
+            }
         }
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ValueTask<ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync<Input, Output, Context, Functions>(ClientSession<Key, Value, Input, Output, Context, Functions> clientSession,
-            ref Key key, ref Input input, Context context = default, CancellationToken token = default)
+                    ref Key key, ref Input input, long startAddress, bool skipKeyVerification, Context context = default, CancellationToken token = default)
             where Functions : IFunctions<Key, Value, Input, Output, Context>
         {
             var pcontext = default(PendingContext<Input, Output, Context>);
@@ -212,12 +244,18 @@ namespace FASTER.core
             if (clientSession.SupportAsync) clientSession.UnsafeResumeThread();
             try
             {
+                if (startAddress != Constants.kInvalidAddress)
+                {
+                    clientSession.ctx.readAddress = startAddress;
+                    clientSession.ctx.operationFlags = skipKeyVerification ? OperationFlags.SkipKeyVerification : OperationFlags.None;
+                }
+
             TryReadAgain:
 
                 internalStatus = InternalRead(ref key, ref input, ref output, ref context, ref pcontext, clientSession.FasterSession, clientSession.ctx, nextSerialNum);
                 if (internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND)
                 {
-                    return new ValueTask<ReadAsyncResult<Input, Output, Context, Functions>>(new ReadAsyncResult<Input, Output, Context, Functions>((Status)internalStatus, output));
+                    return new ValueTask<ReadAsyncResult<Input, Output, Context, Functions>>(new ReadAsyncResult<Input, Output, Context, Functions>((Status)internalStatus, output, clientSession.ctx.readAddress));
                 }
 
                 if (internalStatus == OperationStatus.CPR_SHIFT_DETECTED)
@@ -225,9 +263,14 @@ namespace FASTER.core
                     SynchronizeEpoch(clientSession.ctx, clientSession.ctx, ref pcontext, clientSession.FasterSession);
                     goto TryReadAgain;
                 }
+
+                // Fall through to Status.PENDING handling
             }
             finally
             {
+                clientSession.ctx.readAddress = Constants.kInvalidAddress;
+                clientSession.ctx.operationFlags = FasterKV<Key, Value>.OperationFlags.None;
+
                 clientSession.ctx.serialNum = nextSerialNum;
                 if (clientSession.SupportAsync) clientSession.UnsafeSuspendThread();
             }
