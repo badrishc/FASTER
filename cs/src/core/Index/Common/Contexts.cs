@@ -70,12 +70,6 @@ namespace FASTER.core
 
     public partial class FasterKV<Key, Value> : FasterBase, IFasterKV<Key, Value>
     {
-        [Flags]internal enum OperationFlags : byte
-        {
-            None = 0,
-            SkipKeyVerification = 0x01
-        }
-
         internal struct PendingContext<Input, Output, Context>
         {
             // User provided information
@@ -94,7 +88,9 @@ namespace FASTER.core
             internal long serialNum;
             internal HashBucketEntry entry;
             internal LatchOperation heldLatch;
-            internal OperationFlags operationFlags;
+
+            internal bool skipKeyVerification;
+            internal RecordInfo recordInfo;
 
             public void Dispose()
             {
@@ -114,9 +110,6 @@ namespace FASTER.core
             public AsyncQueue<AsyncIOContext<Key, Value>> readyResponses;
             public List<long> excludedSerialNos;
             public int asyncPendingCount;
-
-            internal OperationFlags operationFlags;
-            internal long readAddress;
 
             public int SyncIoPendingCount => ioPendingRequests.Count - asyncPendingCount;
 

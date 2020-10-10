@@ -135,7 +135,7 @@ namespace StoreDiskReadBenchmark
                         }
                         else
                         {
-                            var result = (await session.ReadAsync(ref key, ref input)).CompleteRead();
+                            var result = (await session.ReadAsync(ref key, ref input)).Complete();
                             if (result.Item1 != Status.OK || result.Item2.value.vfield1 != key.key) // || result.Item2.value.vfield2 != key.key)
                             {
                                 throw new Exception("Wrong value found");
@@ -178,7 +178,7 @@ namespace StoreDiskReadBenchmark
                         {
                             for (int j = 0; j < readBatchSize; j++)
                             {
-                                var result = (await tasks[j].Item2).CompleteRead();
+                                var result = (await tasks[j].Item2).Complete();
                                 if (result.Item1 != Status.OK || result.Item2.value.vfield1 != tasks[j].Item1) // || result.Item2.value.vfield2 != tasks[j].Item1)
                                 {
                                     throw new Exception($"Wrong value found. Found: {result.Item2.value.vfield1}, Expected: {tasks[j].Item1}");

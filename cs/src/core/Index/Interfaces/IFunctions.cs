@@ -21,8 +21,8 @@ namespace FASTER.core
         /// <param name="output"></param>
         /// <param name="ctx"></param>
         /// <param name="status"></param>
-        /// <param name="previousAddress">The previous address in this record's hash chain</param>
-        void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, long previousAddress);
+        /// <param name="recordInfo"></param>
+        void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo);
 
         /// <summary>
         /// Upsert completion

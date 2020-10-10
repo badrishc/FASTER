@@ -22,10 +22,10 @@ namespace FASTER.PSF
             private FC.IHeapContainer<TKVKey> keyContainer;
             private FC.IHeapContainer<TKVValue> valueContainer;
             internal long currentAddress;
-            internal long previousAddress;
+            internal FC.RecordInfo recordInfo;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal void SetKeyContainers(FC.IHeapContainer<TKVKey> kc, FC.IHeapContainer<TKVValue> vc)
+            internal void SetHeapContainers(FC.IHeapContainer<TKVKey> kc, FC.IHeapContainer<TKVValue> vc)
             {
                 this.keyContainer = kc;
                 this.valueContainer = vc;
@@ -34,7 +34,7 @@ namespace FASTER.PSF
             internal ref TKVKey GetKey() => ref this.keyContainer.Get();
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal void DetachKeyContainers(out FC.IHeapContainer<TKVKey> kc, out FC.IHeapContainer<TKVValue> vc)
+            internal void DetachHeapContainers(out FC.IHeapContainer<TKVKey> kc, out FC.IHeapContainer<TKVValue> vc)
             {
                 kc = this.keyContainer;
                 this.keyContainer = null;
@@ -45,9 +45,9 @@ namespace FASTER.PSF
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal void Set(ref Output other)
             {
-                other.DetachKeyContainers(out this.keyContainer, out this.valueContainer);
+                other.DetachHeapContainers(out this.keyContainer, out this.valueContainer);
                 this.currentAddress = other.currentAddress;
-                this.previousAddress = other.previousAddress;
+                this.recordInfo = other.recordInfo;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -67,7 +67,7 @@ namespace FASTER.PSF
             
             internal Context()
             {
-                this.output.previousAddress = Constants.kInvalidAddress;
+                this.output.recordInfo = default;
                 this.status = FC.Status.OK;
             }
         }
@@ -77,9 +77,9 @@ namespace FASTER.PSF
         public virtual void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
         {
             if (!(input.logAccessor is null))
-                output.SetKeyContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
+                output.SetHeapContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
             else
-                // Only currentAddress is needed here; previousAddress is returned via the Read(..., ref long previousAddress, ...) parameter
+                // Only currentAddress is needed here; recordInfo is returned via the Read(..., out RecordInfo recordInfo, ...) parameter
                 // because this is only called on in-memory addresses, not on a Read that has gone pending.
                 output.currentAddress = logicalAddress;
         }
@@ -87,17 +87,17 @@ namespace FASTER.PSF
         public virtual void SingleReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
         {
             if (!(input.logAccessor is null))
-                output.SetKeyContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
+                output.SetHeapContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
             else
-                // Only currentAddress is needed here; previousAddress is returned via the Read(..., ref long previousAddress, ...) parameter
-                // if this is an in-memory call, or via ReadCompletionCallback's (..., long previousAddresss) argument if the Read has gone pending.
+                // Only currentAddress is needed here; recordInfo is returned via the Read(..., out RecordInfo recordInfo, ...) parameter
+                // if this is an in-memory call, or via ReadCompletionCallback's (..., RecordInfo recordInfo) argument if the Read has gone pending.
                 output.currentAddress = logicalAddress;
         }
 
-        public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, FC.Status status, long previousAddress)
+        public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, FC.Status status, FC.RecordInfo recordInfo)
         {
             ctx.output.Set(ref output);
-            ctx.output.previousAddress = previousAddress;
+            ctx.output.recordInfo = recordInfo;
             ctx.status = status;
         }
 

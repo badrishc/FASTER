@@ -21,7 +21,7 @@ namespace FASTER.core
             Exclusive
         }
 
-#region Read Operation
+        #region Read Operation
 
         /// <summary>
         /// Read operation. Computes the 'output' from 'input' and current value corresponding to 'key'.
@@ -31,6 +31,7 @@ namespace FASTER.core
         /// <param name="key">Key of the record.</param>
         /// <param name="input">Input required to compute output from value.</param>
         /// <param name="output">Location to store output computed from input and value.</param>
+        /// <param name="startAddress">If not Constants.kInvalidAddress, this is the address to start at instead of a hash table lookup</param>
         /// <param name="userContext">User context for the operation, in case it goes pending.</param>
         /// <param name="pendingContext">Pending context used internally to store the context of the operation.</param>
         /// <param name="fasterSession">Callback functions.</param>
@@ -61,6 +62,7 @@ namespace FASTER.core
                                     ref Key key,
                                     ref Input input,
                                     ref Output output,
+                                    long startAddress,
                                     ref Context userContext,
                                     ref PendingContext<Input, Output, Context> pendingContext,
                                     Functions fasterSession,
@@ -81,12 +83,22 @@ namespace FASTER.core
 
             #region Trace back for record in in-memory HybridLog
             HashBucketEntry entry = default;
-            long logicalAddress = sessionCtx.readAddress;
-            var usePreviousAddress = logicalAddress != Constants.kInvalidAddress;
-            var tagExists = !usePreviousAddress
-                    ? FindTag(hash, tag, ref bucket, ref slot, ref entry)
-                    : logicalAddress >= hlog.BeginAddress;
+
             OperationStatus status;
+            long logicalAddress;
+            var usePreviousAddress = startAddress != Constants.kInvalidAddress;
+            bool tagExists;
+            if (!usePreviousAddress)
+            {
+                tagExists = FindTag(hash, tag, ref bucket, ref slot, ref entry);
+            }
+            else
+            {
+                logicalAddress = startAddress;
+                tagExists = logicalAddress >= hlog.BeginAddress;
+                entry.Address = logicalAddress;
+            }
+
             if (tagExists)
             {
                 logicalAddress = entry.Address;
@@ -106,7 +118,8 @@ namespace FASTER.core
                             goto CreatePendingContext; // Pivot thread
                         }
 
-                        // This is not called when looking up by address, which is required for skipKeyVerification, so the key param is good.
+                        // This is not called when looking up by address, which is required for skipKeyVerification, so the key param is good
+                        // and we do not set session.Ctx.recordInfo.
                         fasterSession.SingleReader(ref key, ref input, ref readcache.GetValue(physicalAddress), ref output, logicalAddress);
                         return OperationStatus.SUCCESS;
                     }
@@ -116,7 +129,7 @@ namespace FASTER.core
                 {
                     physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
 
-                    if (!sessionCtx.operationFlags.HasFlag(OperationFlags.SkipKeyVerification) && !comparer.Equals(ref key, ref hlog.GetKey(physicalAddress)))
+                    if (!comparer.Equals(ref key, ref hlog.GetKey(physicalAddress)) && !pendingContext.skipKeyVerification)
                     {
                         logicalAddress = hlog.GetInfo(physicalAddress).PreviousAddress;
                         TraceBackForKeyMatch(ref key,
@@ -128,7 +141,7 @@ namespace FASTER.core
                 }
 
                 // If skipKeyVerification, we do not have the key in the call and must use the key from the record.
-                if (sessionCtx.operationFlags.HasFlag(OperationFlags.SkipKeyVerification))
+                if (pendingContext.skipKeyVerification)
                     key = ref hlog.GetKey(physicalAddress);
             }
             else
@@ -138,7 +151,7 @@ namespace FASTER.core
             }
             #endregion
 
-            if (sessionCtx.phase == Phase.PREPARE && GetLatestRecordVersion(ref entry, sessionCtx.version) > sessionCtx.version)
+            if (sessionCtx.phase == Phase.PREPARE && !usePreviousAddress && GetLatestRecordVersion(ref entry, sessionCtx.version) > sessionCtx.version)
             {
                 status = OperationStatus.CPR_SHIFT_DETECTED;
                 goto CreatePendingContext; // Pivot thread
@@ -149,10 +162,10 @@ namespace FASTER.core
             // Mutable region (even fuzzy region is included here)
             if (logicalAddress >= hlog.SafeReadOnlyAddress)
             {
-                if (hlog.GetInfo(physicalAddress).Tombstone)
+                pendingContext.recordInfo = hlog.GetInfo(physicalAddress);
+                if (pendingContext.recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                sessionCtx.readAddress = hlog.GetInfo(physicalAddress).PreviousAddress;
                 fasterSession.ConcurrentReader(ref key, ref input, ref hlog.GetValue(physicalAddress), ref output, logicalAddress);
                 return OperationStatus.SUCCESS;
             }
@@ -160,10 +173,10 @@ namespace FASTER.core
             // Immutable region
             else if (logicalAddress >= hlog.HeadAddress)
             {
-                if (hlog.GetInfo(physicalAddress).Tombstone)
+                pendingContext.recordInfo = hlog.GetInfo(physicalAddress);
+                if (pendingContext.recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                sessionCtx.readAddress = hlog.GetInfo(physicalAddress).PreviousAddress;
                 fasterSession.SingleReader(ref key, ref input, ref hlog.GetValue(physicalAddress), ref output, logicalAddress);
                 return OperationStatus.SUCCESS;
             }
@@ -217,7 +230,7 @@ namespace FASTER.core
                 pendingContext.version = sessionCtx.version;
                 pendingContext.serialNum = lsn;
                 pendingContext.heldLatch = heldOperation;
-                pendingContext.operationFlags = sessionCtx.operationFlags;
+                pendingContext.recordInfo.PreviousAddress = startAddress;
             }
             #endregion
 
@@ -1207,9 +1220,7 @@ namespace FASTER.core
                 if (recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                // If skipKeyVerification, we do not have the key in the call and must use the key from the record.
-                fasterSession.SingleReader(ref currentCtx.operationFlags.HasFlag(OperationFlags.SkipKeyVerification) ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get(),
-                                           ref pendingContext.input, ref hlog.GetContextRecordValue(ref request), ref pendingContext.output, request.logicalAddress);
+                fasterSession.SingleReader(ref pendingContext.key.Get(),ref pendingContext.input, ref hlog.GetContextRecordValue(ref request), ref pendingContext.output, request.logicalAddress);
 
                 if (CopyReadsToTail || UseReadCache)
                 {
@@ -1525,6 +1536,7 @@ namespace FASTER.core
                             internalStatus = InternalRead(ref pendingContext.key.Get(),
                                                           ref pendingContext.input,
                                                           ref pendingContext.output,
+                                                          pendingContext.recordInfo.PreviousAddress,
                                                           ref pendingContext.userContext,
                                                           ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
                             break;

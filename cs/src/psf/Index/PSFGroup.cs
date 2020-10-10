@@ -437,7 +437,7 @@ namespace PSF.Index
                 var readAsyncResult = await session.PsfReadKeyAsync(ref input.QueryKeyRef, ref input, ref output, ref context, session.ctx.serialNum + 1, querySettings);
                 if (querySettings.IsCanceled)
                     yield break;
-                var (status, _) = readAsyncResult.CompleteRead();
+                var (status, _) = readAsyncResult.Complete();
                 if (status != Status.OK)    // TODOerr: check other status
                     yield break;
 
@@ -452,7 +452,7 @@ namespace PSF.Index
                     readAsyncResult = await session.PsfReadAddressAsync(ref input, ref output, ref context, session.ctx.serialNum + 1, querySettings);
                     if (querySettings.IsCanceled)
                         yield break;
-                    (status, _) = readAsyncResult.CompleteRead();
+                    (status, _) = readAsyncResult.Complete();
                     if (status != Status.OK)    // TODOerr: check other status
                         yield break;
 

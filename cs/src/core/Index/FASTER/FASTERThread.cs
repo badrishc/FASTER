@@ -370,13 +370,16 @@ namespace FASTER.core
 
                     if (pendingContext.type == OperationType.READ)
                     {
+                        RecordInfo recordInfo;
+                        unsafe { recordInfo = hlog.GetInfoFromBytePointer(request.record.GetValidPointer()); }
+
                         // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
-                        fasterSession.ReadCompletionCallback(ref pendingContext.operationFlags.HasFlag(OperationFlags.SkipKeyVerification) ? ref hlog.GetContextRecordKey(ref request) : ref key,
+                        fasterSession.ReadCompletionCallback(ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref key,
                                                          ref pendingContext.input,
                                                          ref pendingContext.output,
                                                          pendingContext.userContext,
                                                          status,
-                                                         hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).PreviousAddress
+                                                         recordInfo
                                                          );
                     }
                     else
@@ -421,13 +424,16 @@ namespace FASTER.core
             if (pendingContext.heldLatch == LatchOperation.Shared)
                 ReleaseSharedLatch(key);
 
+            RecordInfo recordInfo;
+            unsafe { recordInfo = hlog.GetInfoFromBytePointer(request.record.GetValidPointer()); }
+
             // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
             fasterSession.ReadCompletionCallback(ref pendingContext.operationFlags.HasFlag(OperationFlags.SkipKeyVerification) ? ref hlog.GetContextRecordKey(ref request) : ref key,
                                              ref pendingContext.input,
                                              ref pendingContext.output,
                                              pendingContext.userContext,
                                              status,
-                                             hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).PreviousAddress);
+                                             recordInfo);
 
             s.Item1 = status;
             s.Item2 = pendingContext.output;

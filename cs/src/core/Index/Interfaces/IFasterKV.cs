@@ -155,34 +155,11 @@ namespace FASTER.core
         public bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType);
 
         /// <summary>
-        /// Takes a full (index + log) checkpoint of FASTER asynchronously
-        /// </summary>
-        /// <param name="checkpointType">The checkpoint type to use (ignores the checkpoint type specified in the <see cref="CheckpointSettings"/>)</param>
-        /// <param name="cancellationToken">A token to cancel the operation</param>
-        /// <returns>A (bool success, Guid token) tuple.
-        /// success: Whether we successfully initiated the checkpoint (initiation may fail if we are already taking a checkpoint or performing some other
-        /// operation such as growing the index).
-        /// token: Token for taken checkpoint.
-        /// Await the task to complete checkpoint, if initiated successfully</returns>
-        public ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
-
-        /// <summary>
         /// Initiate checkpoint of FASTER index only (not log)
         /// </summary>
         /// <param name="token">Token describing checkpoint</param>
         /// <returns>Whether we could initiate the checkpoint. Use CompleteCheckpointAsync to wait completion.</returns>
         bool TakeIndexCheckpoint(out Guid token);
-
-        /// <summary>
-        /// Initiate checkpoint of FASTER index only (not log)
-        /// </summary>
-        /// <param name="cancellationToken">A token to cancel the operation</param>
-        /// <returns>A (bool success, Guid token) tuple.
-        /// success: Whether we successfully initiated the checkpoint (initiation may fail if we are already taking a checkpoint or performing some other
-        /// operation such as growing the index).
-        /// token: Token for taken checkpoint.
-        /// Await the task to complete checkpoint, if initiated successfully</returns>
-        public ValueTask<(bool success, Guid token)> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Initiate checkpoint of FASTER log only (not index)
@@ -199,18 +176,6 @@ namespace FASTER.core
         /// <returns>Whether we successfully initiated the checkpoint (initiation mayfail if we are already taking a checkpoint or performing some other
         /// operation such as growing the index). Use CompleteCheckpointAsync to wait completion.</returns>
         public bool TakeHybridLogCheckpoint(out Guid token, CheckpointType checkpointType);
-
-        /// <summary>
-        /// Initiate checkpoint of FASTER log only (not index)
-        /// </summary>
-        /// <param name="cancellationToken">A token to cancel the operation</param>
-        /// <param name="checkpointType">The checkpoint type to use (ignores the checkpoint type specified in the <see cref="CheckpointSettings"/>)</param>
-        /// <returns>A (bool success, Guid token) tuple.
-        /// success: Whether we successfully initiated the checkpoint (initiation may fail if we are already taking a checkpoint or performing some other
-        /// operation such as growing the index).
-        /// token: Token for taken checkpoint.
-        /// Await the task to complete checkpoint, if initiated successfully</returns>
-        public ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Recover from last successful checkpoints

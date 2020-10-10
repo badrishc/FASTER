@@ -101,6 +101,14 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Status Read(Key key, Input input, out Output output, Context userContext = default, long serialNo = 0)
+        {
+            output = default;
+            return Read(ref key, ref input, ref output, userContext, serialNo);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Status Read(ref Key key, ref Output output, Context userContext = default, long serialNo = 0)
         {
             Input input = default;
@@ -109,42 +117,88 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status Read(ref Key key, ref Input input, ref Output output, ref long previousAddress, bool skipKeyVerification = false, Context userContext = default, long serialNo = 0)
+        public Status Read(Key key, out Output output, Context userContext = default, long serialNo = 0)
+        {
+            Input input = default;
+            output = default;
+            return Read(ref key, ref input, ref output, userContext, serialNo);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public (Status, Output) Read(Key key, Context userContext = default, long serialNo = 0)
+        {
+            Input input = default;
+            Output output = default;
+            return (Read(ref key, ref input, ref output, userContext, serialNo), output);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Status Read(ref Key key, ref Input input, ref Output output, long startAddress, out RecordInfo recordInfo, Context userContext = default, long serialNo = 0)
         {
             if (SupportAsync) UnsafeResumeThread();
             try
             {
-                if (previousAddress != Constants.kInvalidAddress)
-                {
-                    this.ctx.readAddress = previousAddress;
-                    this.ctx.operationFlags = skipKeyVerification ? FasterKV<Key, Value>.OperationFlags.SkipKeyVerification : FasterKV<Key, Value>.OperationFlags.None;
-                }
-                var status = fht.ContextRead(ref key, ref input, ref output, userContext, FasterSession, serialNo, ctx);
-                if (status == Status.OK)
-                    previousAddress = this.ctx.readAddress;
-                return status;
+                return fht.ContextRead(ref key, ref input, ref output, startAddress, out recordInfo, userContext, FasterSession, serialNo, ctx);
             }
             finally
             {
-                this.ctx.readAddress = Constants.kInvalidAddress;
-                this.ctx.operationFlags = FasterKV<Key, Value>.OperationFlags.None;
                 if (SupportAsync) UnsafeSuspendThread();
             }
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, Context context = default, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
-            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, skipKeyVerification: false, context, token);
+            Debug.Assert(SupportAsync, "Session does not support async operations");
+            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, cancellationToken);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, long startAddress, bool skipKeyVerification = false,
-                                                                                                            Context context = default, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
-            return fht.ReadAsync(this, ref key, ref input, startAddress, skipKeyVerification, context, token);
+            Debug.Assert(SupportAsync, "Session does not support async operations");
+            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, Context userContext = default, long serialNo = 0, CancellationToken token = default)
+        {
+            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Input input = default;
+            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, token);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(Key key, Context context = default, long serialNo = 0, CancellationToken token = default)
+        {
+            Input input = default;
+            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
+        }
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, long startAddress, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        {
+            Debug.Assert(SupportAsync, "Session does not support async operations");
+            return fht.ReadAsync(this, ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public Status GetKey(long logicalAddress, ref Input input, ref Output output, Context userContext = default, long serialNo = 0)
+        {
+            throw new FasterException("GetKey NYI");
+        }
+
+        /// <inheritdoc/>
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> GetKeyAsync(long logicalAddress, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        {
+            throw new FasterException("GetKeyAsync NYI");
         }
 
         /// <inheritdoc/>
@@ -411,46 +465,6 @@ namespace FASTER.core
             fht.AtomicSwitch(ctx, ctx.prevCtx, version, fht._hybridLogCheckpoint.info.checkpointTokens);
         }
 
-        /// <summary>
-        /// State storage for the completion of an async Read, or the result if the read was completed synchronously
-        /// </summary>
-        public struct ReadAsyncResult
-        {
-            readonly Status status;
-            readonly Output output;
-
-            readonly FasterKV<Key, Value>.ReadAsyncInternal<Input, Output, Context, Functions> readAsyncInternal;
-
-            internal ReadAsyncResult(Status status, Output output)
-            {
-                this.status = status;
-                this.output = output;
-                readAsyncInternal = default;
-            }
-
-            internal ReadAsyncResult(
-                FasterKV<Key, Value> fasterKV,
-                ClientSession<Key, Value, Input, Output, Context, Functions> clientSession,
-                FasterKV<Key, Value>.PendingContext<Input, Output, Context> pendingContext, AsyncIOContext<Key, Value> diskRequest)
-            {
-                status = Status.PENDING;
-                output = default;
-                readAsyncInternal = new FasterKV<Key, Value>.ReadAsyncInternal<Input, Output, Context, Functions>(fasterKV, clientSession, pendingContext, diskRequest);
-            }
-
-            /// <summary>
-            /// Complete the read operation, after any I/O is completed.
-            /// </summary>
-            /// <returns>The read result, or throws an exception if error encountered.</returns>
-            public (Status, Output) CompleteRead()
-            {
-                if (status != Status.PENDING)
-                    return (status, output);
-
-                return readAsyncInternal.CompleteRead();
-            }
-        }
-
         // This is a struct to allow JIT to inline calls (and bypass default interface call mechanism)
         internal struct AsyncFasterSession : IFasterSession<Key, Value, Input, Output, Context>, IFunctions<Key, Value, Input, Output, Context>
         {
@@ -491,8 +505,8 @@ namespace FASTER.core
             public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) 
                 => _clientSession.functions.InPlaceUpdater(ref key, ref input, ref value, logicalAddress);
 
-            public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, long previousAddress) 
-                => _clientSession.functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, previousAddress);
+            public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo) 
+                => _clientSession.functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
 
             public void RMWCompletionCallback(ref Key key, ref Input input, Context ctx, Status status) 
                 => _clientSession.functions.RMWCompletionCallback(ref key, ref input, ctx, status);

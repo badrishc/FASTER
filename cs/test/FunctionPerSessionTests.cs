@@ -150,7 +150,7 @@ namespace FASTER.test
                 Assert.AreEqual(1, _remover.InPlaceCount);
 
                 var read = await readerSession.ReadAsync(ref key, ref empty);
-                var result = read.CompleteRead();
+                var result = read.Complete();
 
                 var actual = result.Item2;
                 Assert.AreEqual(2, actual.ReferenceCount);
@@ -160,7 +160,7 @@ namespace FASTER.test
 
                 await removerSession.RMWAsync(ref key, ref empty);
                 read = await readerSession.ReadAsync(ref key, ref empty);
-                result = read.CompleteRead();
+                result = read.Complete();
 
                 actual = result.Item2;
                 Assert.AreEqual(1, actual.ReferenceCount);
