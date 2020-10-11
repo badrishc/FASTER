@@ -17,15 +17,15 @@ namespace FASTER.test
     [TestFixture]
     internal class BlittableIterationTests
     {
-        private FasterKV<KeyStruct, ValueStruct, InputStruct, OutputStruct, int, FunctionsCompaction> fht;
+        private FasterKV<KeyStruct, ValueStruct> fht;
         private IDevice log;
 
         [SetUp]
         public void Setup()
         {
             log = Devices.CreateLogDevice(TestContext.CurrentContext.TestDirectory + "\\BlittableIterationTests.log", deleteOnClose: true);
-            fht = new FasterKV<KeyStruct, ValueStruct, InputStruct, OutputStruct, int, FunctionsCompaction>
-                (1L << 20, new FunctionsCompaction(), new LogSettings { LogDevice = log, MemorySizeBits = 15, PageSizeBits = 7 });
+            fht = new FasterKV<KeyStruct, ValueStruct>
+                (1L << 20, new LogSettings { LogDevice = log, MemorySizeBits = 15, PageSizeBits = 7 });
         }
 
         [TearDown]
@@ -39,7 +39,7 @@ namespace FASTER.test
         [Test]
         public void BlittableIterationTest1()
         {
-            using var session = fht.NewSession();
+            using var session = fht.For(new FunctionsCompaction()).NewSession<FunctionsCompaction>();
 
             const int totalRecords = 2000;
             var start = fht.Log.TailAddress;
@@ -67,7 +67,7 @@ namespace FASTER.test
             {
                 var key1 = new KeyStruct { kfield1 = i, kfield2 = i + 1 };
                 var value = new ValueStruct { vfield1 = 2 * i, vfield2 = i + 1 };
-                session.Upsert(ref key1, ref value, 0, 1);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;
@@ -81,12 +81,11 @@ namespace FASTER.test
 
             Assert.IsTrue(count == totalRecords);
 
-
             for (int i = totalRecords/2; i < totalRecords; i++)
             {
                 var key1 = new KeyStruct { kfield1 = i, kfield2 = i + 1 };
                 var value = new ValueStruct { vfield1 = i, vfield2 = i + 1 };
-                session.Upsert(ref key1, ref value, 0, 0);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;
@@ -103,7 +102,7 @@ namespace FASTER.test
             {
                 var key1 = new KeyStruct { kfield1 = i, kfield2 = i + 1 };
                 var value = new ValueStruct { vfield1 = i, vfield2 = i + 1 };
-                session.Upsert(ref key1, ref value, 0, 0);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;
@@ -120,7 +119,7 @@ namespace FASTER.test
             {
                 var key1 = new KeyStruct { kfield1 = i, kfield2 = i + 1 };
                 var value = new ValueStruct { vfield1 = i, vfield2 = i + 1 };
-                session.Delete(ref key1, 0, 0);
+                session.Delete(ref key1, 0);
             }
 
             count = 0;
@@ -133,12 +132,11 @@ namespace FASTER.test
 
             Assert.IsTrue(count == totalRecords / 2);
 
-
             for (int i = 0; i < totalRecords; i++)
             {
                 var key1 = new KeyStruct { kfield1 = i, kfield2 = i + 1 };
                 var value = new ValueStruct { vfield1 = 3 * i, vfield2 = i + 1 };
-                session.Upsert(ref key1, ref value, 0, 1);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;

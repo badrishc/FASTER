@@ -17,7 +17,7 @@ namespace FASTER.test
     [TestFixture]
     internal class ObjectFASTERTests
     {
-        private FasterKV<MyKey, MyValue, MyInput, MyOutput, Empty, MyFunctions> fht;
+        private FasterKV<MyKey, MyValue> fht;
         private IDevice log, objlog;
 
         [SetUp]
@@ -26,8 +26,8 @@ namespace FASTER.test
             log = Devices.CreateLogDevice(TestContext.CurrentContext.TestDirectory + "\\ObjectFASTERTests.log", deleteOnClose: true);
             objlog = Devices.CreateLogDevice(TestContext.CurrentContext.TestDirectory + "\\ObjectFASTERTests.obj.log", deleteOnClose: true);
 
-            fht = new FasterKV<MyKey, MyValue, MyInput, MyOutput, Empty, MyFunctions>
-                (128, new MyFunctions(),
+            fht = new FasterKV<MyKey, MyValue>
+                (128,
                 logSettings: new LogSettings { LogDevice = log, ObjectLogDevice = objlog, MutableFraction = 0.1, MemorySizeBits = 15, PageSizeBits = 10 },
                 checkpointSettings: new CheckpointSettings { CheckPointType = CheckpointType.FoldOver },
                 serializerSettings: new SerializerSettings<MyKey, MyValue> { keySerializer = () => new MyKeySerializer(), valueSerializer = () => new MyValueSerializer() }
@@ -45,7 +45,7 @@ namespace FASTER.test
         [Test]
         public void ObjectInMemWriteRead()
         {
-            using var session = fht.NewSession();
+            using var session = fht.NewSession(new MyFunctions());
 
             var key1 = new MyKey { key = 9999999 };
             var value = new MyValue { value = 23 };
@@ -61,7 +61,7 @@ namespace FASTER.test
         [Test]
         public void ObjectInMemWriteRead2()
         {
-            using var session = fht.NewSession();
+            using var session = fht.NewSession(new MyFunctions());
 
             var key1 = new MyKey { key = 8999998 };
             var input1 = new MyInput { value = 23 };
@@ -86,7 +86,7 @@ namespace FASTER.test
         [Test]
         public void ObjectDiskWriteRead()
         {
-            using var session = fht.NewSession();
+            using var session = fht.NewSession(new MyFunctions());
 
             for (int i = 0; i < 2000; i++)
             {
@@ -164,13 +164,13 @@ namespace FASTER.test
         [Test]
         public async Task AsyncObjectDiskWriteRead()
         {
-            using var session = fht.NewSession();
+            using var session = fht.NewSession(new MyFunctions());
 
             for (int i = 0; i < 2000; i++)
             {
                 var key = new MyKey { key = i };
                 var value = new MyValue { value = i };
-                await session.UpsertAsync(ref key, ref value, Empty.Default);
+                session.Upsert(ref key, ref value);
             }
 
             var key1 = new MyKey { key = 1989 };
@@ -198,8 +198,11 @@ namespace FASTER.test
             {
                 var key = new MyKey { key = i };
                 input = new MyInput { value = 1 };
-                await session.RMWAsync(ref key, ref input, Empty.Default);
-
+                var r = await session.RMWAsync(ref key, ref input, Empty.Default);
+                while (r.status == Status.PENDING)
+                {
+                    r = await r.CompleteAsync(); // test async version of RMW completion
+                }
             }
 
             // Update first 100 using RMW from storage
@@ -207,7 +210,7 @@ namespace FASTER.test
             {
                 var key = new MyKey { key = i };
                 input = new MyInput { value = 1 };
-                await session.RMWAsync(ref key, ref input, Empty.Default);
+                (await session.RMWAsync(ref key, ref input, Empty.Default)).Complete();
             }
 
             for (int i = 0; i < 2000; i++)

@@ -151,6 +151,7 @@ namespace FASTER.core
                         readcache = new VariableLengthBlittableAllocator<Key, Value>(
                             new LogSettings
                             {
+                                LogDevice = new NullDevice(),
                                 PageSizeBits = logSettings.ReadCacheSettings.PageSizeBits,
                                 MemorySizeBits = logSettings.ReadCacheSettings.MemorySizeBits,
                                 SegmentSizeBits = logSettings.ReadCacheSettings.MemorySizeBits,
@@ -169,6 +170,7 @@ namespace FASTER.core
                         readcache = new BlittableAllocator<Key, Value>(
                             new LogSettings
                             {
+                                LogDevice = new NullDevice(),
                                 PageSizeBits = logSettings.ReadCacheSettings.PageSizeBits,
                                 MemorySizeBits = logSettings.ReadCacheSettings.MemorySizeBits,
                                 SegmentSizeBits = logSettings.ReadCacheSettings.MemorySizeBits,
@@ -190,6 +192,8 @@ namespace FASTER.core
                     readcache = new GenericAllocator<Key, Value>(
                         new LogSettings
                         {
+                            LogDevice = new NullDevice(),
+                            ObjectLogDevice = new NullDevice(),
                             PageSizeBits = logSettings.ReadCacheSettings.PageSizeBits,
                             MemorySizeBits = logSettings.ReadCacheSettings.MemorySizeBits,
                             SegmentSizeBits = logSettings.ReadCacheSettings.MemorySizeBits,
@@ -382,18 +386,22 @@ namespace FASTER.core
         /// <summary>
         /// Recover from the latest checkpoint (blocking operation)
         /// </summary>
-        public void Recover()
+        /// <param name="numPagesToPreload">Number of pages to preload into memory (beyond what needs to be read for recovery)</param>
+        /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>
+        public void Recover(int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            InternalRecoverFromLatestCheckpoints();
+            InternalRecoverFromLatestCheckpoints(numPagesToPreload, undoFutureVersions);
         }
 
         /// <summary>
         /// Recover from specific token (blocking operation)
         /// </summary>
-        /// <param name="fullCheckpointToken"></param>
-        public void Recover(Guid fullCheckpointToken)
+        /// <param name="fullCheckpointToken">Token</param>
+        /// <param name="numPagesToPreload">Number of pages to preload into memory after recovery</param>
+        /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>
+        public void Recover(Guid fullCheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            InternalRecover(fullCheckpointToken, fullCheckpointToken);
+            InternalRecover(fullCheckpointToken, fullCheckpointToken, numPagesToPreload, undoFutureVersions);
         }
 
         /// <summary>
@@ -401,9 +409,11 @@ namespace FASTER.core
         /// </summary>
         /// <param name="indexCheckpointToken"></param>
         /// <param name="hybridLogCheckpointToken"></param>
-        public void Recover(Guid indexCheckpointToken, Guid hybridLogCheckpointToken)
+        /// <param name="numPagesToPreload">Number of pages to preload into memory after recovery</param>
+        /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>
+        public void Recover(Guid indexCheckpointToken, Guid hybridLogCheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            InternalRecover(indexCheckpointToken, hybridLogCheckpointToken);
+            InternalRecover(indexCheckpointToken, hybridLogCheckpointToken, numPagesToPreload, undoFutureVersions);
         }
 
         /// <summary>
@@ -455,9 +465,10 @@ namespace FASTER.core
             }
             else
             {
-                status = HandleOperationStatus(sessionCtx, sessionCtx, pcontext, fasterSession, internalStatus);
+                status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, false, out _);
             }
 
+            Debug.Assert(serialNo >= sessionCtx.serialNum, "Operation serial numbers must be non-decreasing");
             sessionCtx.serialNum = serialNo;
             return status;
         }
@@ -508,9 +519,10 @@ namespace FASTER.core
             }
             else
             {
-                status = HandleOperationStatus(sessionCtx, sessionCtx, pcontext, fasterSession, internalStatus);
+                status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, false, out _);
             }
 
+            Debug.Assert(serialNo >= sessionCtx.serialNum, "Operation serial numbers must be non-decreasing");
             sessionCtx.serialNum = serialNo;
             return status;
         }
@@ -534,9 +546,10 @@ namespace FASTER.core
             }
             else
             {
-                status = HandleOperationStatus(sessionCtx, sessionCtx, pcontext, fasterSession, internalStatus);
+                status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, false, out _);
             }
 
+            Debug.Assert(serialNo >= sessionCtx.serialNum, "Operation serial numbers must be non-decreasing");
             sessionCtx.serialNum = serialNo;
             return status;
         }
@@ -564,9 +577,10 @@ namespace FASTER.core
             }
             else
             {
-                status = HandleOperationStatus(sessionCtx, sessionCtx, pcontext, fasterSession, internalStatus);
+                status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, false, out _);
             }
 
+            Debug.Assert(serialNo >= sessionCtx.serialNum, "Operation serial numbers must be non-decreasing");
             sessionCtx.serialNum = serialNo;
             return status;
         }

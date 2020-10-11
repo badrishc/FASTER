@@ -17,12 +17,14 @@ namespace StoreDiskReadBenchmark
         static FasterKV<Key, Value> faster;
         static int numOps = 0;
 
-        const int NumParallelSessions = 4;
-        const int NumKeys = 20_000_000 / NumParallelSessions;
-        const bool periodicCommit = false;
-        const bool useAsync = false;
-        const bool readBatching = true;
-        const int readBatchSize = 128;
+        const int NumParallelSessions = 4; // number of parallel sessions
+        const int NumKeys = 20_000_000 / NumParallelSessions; // number of keys in database
+        const bool periodicCommit = false; // whether we have a separate periodic commit thread
+        const bool waitForCommit = false; // whether upserts wait for commit every so often
+        const bool useAsync = false; // whether we use sync or async operations on session
+        const bool readBatching = true; // whether we batch reads
+        const int readBatchSize = 128; // size of batch, if we are batching reads
+        internal const bool simultaneousReadWrite = false; // whether we read & upsert at the same time
 
         /// <summary>
         /// Main program entry point
@@ -30,15 +32,17 @@ namespace StoreDiskReadBenchmark
         static void Main()
         {
             var path = Path.GetTempPath() + "FasterKVDiskReadBenchmark\\";
+            if (Directory.Exists(path))
+                new DirectoryInfo(path).Delete(true);
 
             // Use real local storage device
-            // var log = Devices.CreateLogDevice(path + "hlog.log", deleteOnClose: true);
+            var log = Devices.CreateLogDevice(path + "hlog.log", deleteOnClose: true);
 
             // Use in-memory device
-            var log = new LocalMemoryDevice(1L << 33, 1L << 30, 1);
+            // var log = new LocalMemoryDevice(1L << 33, 1L << 30, 1);
 
             var logSettings = new LogSettings { LogDevice = log, MemorySizeBits = 25, PageSizeBits = 20 };
-            var checkpointSettings = new CheckpointSettings { CheckpointDir = path, CheckPointType = CheckpointType.FoldOver };
+            var checkpointSettings = new CheckpointSettings { CheckpointDir = path };
 
             faster = new FasterKV<Key, Value>(1L << 25, logSettings, checkpointSettings);
 
@@ -61,7 +65,9 @@ namespace StoreDiskReadBenchmark
                 int local = i;
                 tasks[i] = Task.Run(() => AsyncUpsertOperator(local));
             }
-            Task.WaitAll(tasks);
+
+            if (!simultaneousReadWrite)
+                Task.WaitAll(tasks);
 
             tasks = new Task[NumParallelSessions];
             for (int i = 0; i < NumParallelSessions; i++)
@@ -80,30 +86,30 @@ namespace StoreDiskReadBenchmark
             using var session = faster.For(new MyFuncs()).NewSession<MyFuncs>(id.ToString() + "upsert");
             await Task.Yield();
 
-            try
+            do
             {
-                Key key;
-                Value value;
-                for (int i = NumKeys * id; i < NumKeys * (id + 1); i++)
+                try
                 {
-                    key = new Key(i);
-                    value = new Value(i, i);
-                    if (useAsync)
-                        await session.UpsertAsync(ref key, ref value);
-                    else
-                        session.Upsert(ref key, ref value, Empty.Default, 0);
-                    Interlocked.Increment(ref numOps);
-
-                    if (periodicCommit && i % 100 == 0)
+                    Key key;
+                    Value value;
+                    for (int i = NumKeys * id; i < NumKeys * (id + 1); i++)
                     {
-                        await session.WaitForCommitAsync();
+                        key = new Key(i);
+                        value = new Value(i);
+                        session.Upsert(ref key, ref value, Empty.Default, 0);
+                        Interlocked.Increment(ref numOps);
+
+                        if (periodicCommit && waitForCommit && i % 100 == 0)
+                        {
+                            await session.WaitForCommitAsync();
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"{nameof(AsyncUpsertOperator)}({id}): {ex}");
-            }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"{nameof(AsyncUpsertOperator)}({id}): {ex}");
+                }
+            } while (simultaneousReadWrite);
         }
 
         /// <summary>
@@ -136,9 +142,10 @@ namespace StoreDiskReadBenchmark
                         else
                         {
                             var result = (await session.ReadAsync(ref key, ref input)).Complete();
-                            if (result.Item1 != Status.OK || result.Item2.value.vfield1 != key.key) // || result.Item2.value.vfield2 != key.key)
+                            if (result.Item1 != Status.OK || result.Item2.value.vfield1 != key.key)
                             {
-                                throw new Exception("Wrong value found");
+                                if (!simultaneousReadWrite)
+                                    throw new Exception("Wrong value found");
                             }
                         }
                     }
@@ -150,9 +157,10 @@ namespace StoreDiskReadBenchmark
                         {
                             if (result != Status.PENDING)
                             {
-                                if (output.value.vfield1 != key.key) // || output.value.vfield2 != key.key)
+                                if (output.value.vfield1 != key.key)
                                 {
-                                    throw new Exception("Wrong value found");
+                                    if (!simultaneousReadWrite)
+                                        throw new Exception("Wrong value found");
                                 }
                             }
                         }
@@ -162,9 +170,10 @@ namespace StoreDiskReadBenchmark
                             {
                                 session.CompletePending(true);
                             }
-                            if (output.value.vfield1 != key.key) // || output.value.vfield2 != key.key)
+                            if (output.value.vfield1 != key.key)
                             {
-                                throw new Exception("Wrong value found");
+                                if (!simultaneousReadWrite)
+                                    throw new Exception("Wrong value found");
                             }
                         }
                     }
@@ -179,9 +188,10 @@ namespace StoreDiskReadBenchmark
                             for (int j = 0; j < readBatchSize; j++)
                             {
                                 var result = (await tasks[j].Item2).Complete();
-                                if (result.Item1 != Status.OK || result.Item2.value.vfield1 != tasks[j].Item1) // || result.Item2.value.vfield2 != tasks[j].Item1)
+                                if (result.Item1 != Status.OK || result.Item2.value.vfield1 != tasks[j].Item1)
                                 {
-                                    throw new Exception($"Wrong value found. Found: {result.Item2.value.vfield1}, Expected: {tasks[j].Item1}");
+                                    if (!simultaneousReadWrite)
+                                        throw new Exception($"Wrong value found. Found: {result.Item2.value.vfield1}, Expected: {tasks[j].Item1}");
                                 }
                             }
                         }
@@ -191,7 +201,7 @@ namespace StoreDiskReadBenchmark
                         }
                     }
 
-                    if (periodicCommit && i % 100 == 0)
+                    if (periodicCommit && waitForCommit && i % 100 == 0)
                     {
                         await session.WaitForCommitAsync();
                     }
@@ -231,8 +241,11 @@ namespace StoreDiskReadBenchmark
             {
                 Thread.Sleep(5000);
 
-                faster.TakeFullCheckpoint(out _);
-                faster.CompleteCheckpointAsync().GetAwaiter().GetResult();
+                // Take log-only checkpoint (quick - no index save)
+                faster.TakeHybridLogCheckpointAsync(CheckpointType.FoldOver).GetAwaiter().GetResult();
+
+                // Take index + log checkpoint (longer time)
+                // faster.TakeFullCheckpointAsync(CheckpointType.FoldOver).GetAwaiter().GetResult();
             }
         }
     }

@@ -21,7 +21,7 @@ namespace FASTER.core
     /// <typeparam name="Output"></typeparam>
     /// <typeparam name="Context"></typeparam>
     /// <typeparam name="Functions"></typeparam>
-    public sealed partial class ClientSession<Key, Value, Input, Output, Context, Functions> : IClientSession, IClientSession<Key, Value, Input, Output, Context, Functions>
+    public sealed class ClientSession<Key, Value, Input, Output, Context, Functions> : IClientSession, IClientSession<Key, Value, Input, Output, Context, Functions>
         where Functions : IFunctions<Key, Value, Input, Output, Context>
     {
         private readonly FasterKV<Key, Value> fht;
@@ -73,11 +73,22 @@ namespace FASTER.core
         public string ID { get { return ctx.guid; } }
 
         /// <summary>
+        /// Next sequential serial no for session (current serial no + 1)
+        /// </summary>
+        public long NextSerialNo => ctx.serialNum + 1;
+
+        /// <summary>
+        /// Current serial no for session
+        /// </summary>
+        public long SerialNo => ctx.serialNum;
+
+        /// <summary>
         /// Dispose session
         /// </summary>
         public void Dispose()
         {
             CompletePending(true);
+            fht.DisposeClientSession(ID);
 
             // Session runs on a single thread
             if (!SupportAsync)
@@ -86,7 +97,7 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status Read(ref Key key, ref Input input, ref Output output, Context userContext, long serialNo)
+        public Status Read(ref Key key, ref Input input, ref Output output, Context userContext = default, long serialNo = 0)
         {
             if (SupportAsync) UnsafeResumeThread();
             try
@@ -112,7 +123,7 @@ namespace FASTER.core
         public Status Read(ref Key key, ref Output output, Context userContext = default, long serialNo = 0)
         {
             Input input = default;
-            return this.Read(ref key, ref input, ref output, userContext, serialNo);
+            return Read(ref key, ref input, ref output, userContext, serialNo);
         }
 
         /// <inheritdoc/>
@@ -218,27 +229,12 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask UpsertAsync(ref Key key, ref Value desiredValue, Context context = default, bool waitForCommit = false, CancellationToken token = default)
-        {
-            var status = Upsert(ref key, ref desiredValue, context, ctx.serialNum + 1);
-
-            if (status == Status.OK && !waitForCommit)
-                return default;
-
-            return SlowUpsertAsync(this, waitForCommit, status, token);
-        }
-
-        private static async ValueTask SlowUpsertAsync(ClientSession<Key, Value, Input, Output, Context, Functions> @this, bool waitForCommit, Status status, CancellationToken token)
-        {
-            if (status == Status.PENDING)
-                await @this.CompletePendingAsync(waitForCommit, token);
-            else if (waitForCommit)
-                await @this.WaitForCommitAsync(token);
-        }
+        public Status Upsert(Key key, Value desiredValue, Context userContext = default, long serialNo = 0)
+            => Upsert(ref key, ref desiredValue, userContext, serialNo);
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status RMW(ref Key key, ref Input input, Context userContext, long serialNo)
+        public Status RMW(ref Key key, ref Input input, Context userContext = default, long serialNo = 0)
         {
             if (SupportAsync) UnsafeResumeThread();
             try
@@ -253,32 +249,25 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status RMW(ref Key key, ref Input input) => this.RMW(ref key, ref input, default, 0);
+        public Status RMW(Key key, Input input, Context userContext = default, long serialNo = 0)
+            => RMW(ref key, ref input, userContext, serialNo);
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask RMWAsync(ref Key key, ref Input input, Context context = default, bool waitForCommit = false, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
-            var status = RMW(ref key, ref input, context, ctx.serialNum + 1);
-
-            if (status == Status.OK && !waitForCommit)
-                return default;
-
-            return SlowRMWAsync(this, waitForCommit, status, token);
-        }
-
-        private static async ValueTask SlowRMWAsync(ClientSession<Key, Value, Input, Output, Context, Functions> @this, bool waitForCommit, Status status, CancellationToken token)
-        {
-
-            if (status == Status.PENDING)
-                await @this.CompletePendingAsync(waitForCommit, token);
-            else if (waitForCommit)
-                await @this.WaitForCommitAsync(token);
+            Debug.Assert(SupportAsync, "Session does not support async operations");
+            return fht.RmwAsync(this, ref key, ref input, context, serialNo, token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status Delete(ref Key key, Context userContext, long serialNo)
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
+            => RMWAsync(ref key, ref input, context, serialNo, token);
+
+        /// <inheritdoc/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Status Delete(ref Key key, Context userContext = default, long serialNo = 0)
         {
             if (SupportAsync) UnsafeResumeThread();
             try
@@ -293,31 +282,8 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status Delete(ref Key key)
-        {
-                return this.Delete(ref key, default, 0);
-        }
-
-        /// <inheritdoc/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask DeleteAsync(ref Key key, Context context = default, bool waitForCommit = false, CancellationToken token = default)
-        {
-            var status = Delete(ref key, context, ctx.serialNum + 1);
-
-            if (status == Status.OK && !waitForCommit)
-                return default;
-
-            return SlowDeleteAsync(this, waitForCommit, status, token);
-        }
-
-        private static async ValueTask SlowDeleteAsync(ClientSession<Key, Value, Input, Output, Context, Functions> @this, bool waitForCommit, Status status, CancellationToken token)
-        {
-
-            if (status == Status.PENDING)
-                await @this.CompletePendingAsync(waitForCommit, token);
-            else if (waitForCommit)
-                await @this.WaitForCommitAsync(token);
-        }
+        public Status Delete(Key key, Context userContext = default, long serialNo = 0)
+            => Delete(ref key, userContext, serialNo);
 
         /// <summary>
         /// Experimental feature
@@ -486,6 +452,9 @@ namespace FASTER.core
 
             public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) 
                 => _clientSession.functions.ConcurrentWriter(ref key, ref src, ref dst, logicalAddress);
+
+            public bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue)
+                => _clientSession.functions.NeedCopyUpdate(ref key, ref input, ref oldValue);
 
             public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress) 
                 => _clientSession.functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue, oldLogicalAddress, newLogicalAddress);

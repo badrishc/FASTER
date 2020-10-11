@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 
 namespace FASTER.core
@@ -56,7 +57,7 @@ namespace FASTER.core
         void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint);
 
         /// <summary>
-        /// Initial update for RMW (essentially an insert operation).
+        /// Initial update for RMW (essentially an insert operation at the tail of the log).
         /// </summary>
         /// <param name="key">The key for this record</param>
         /// <param name="input">The user input to be used for computing the updated <paramref name="value"/></param>
@@ -65,7 +66,19 @@ namespace FASTER.core
         void InitialUpdater(ref Key key, ref Input input, ref Value value, long address);
 
         /// <summary>
-        /// Copy-update for RMW (copy/update the value to a new location)
+        /// Whether we need to invoke copy-update for RMW
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="input"></param>
+        /// <param name="oldValue"></param>
+        bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue)
+#if NETSTANDARD21            
+            => true
+#endif
+            ;
+
+        /// <summary>
+        /// Copy-update for RMW (RCU to the tail of the log)
         /// </summary>
         /// <param name="key">The key for this record</param>
         /// <param name="input">The user input to be used for computing <paramref name="newValue"/> from <paramref name="oldValue"/></param>

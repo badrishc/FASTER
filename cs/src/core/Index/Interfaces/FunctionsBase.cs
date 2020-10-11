@@ -25,6 +25,7 @@ namespace FASTER.core
         public virtual void SingleWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) => dst = src;
 
         public virtual void InitialUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) { }
+        public virtual bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue) => true;
         public virtual void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress) { }
         public virtual bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) { return true; }
 

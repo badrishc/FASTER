@@ -17,7 +17,7 @@ namespace FASTER.test
     [TestFixture]
     internal class GenericIterationTests
     {
-        private FasterKV<MyKey, MyValue, MyInput, MyOutput, int, MyFunctionsDelete> fht;
+        private FasterKV<MyKey, MyValue> fht;
         private ClientSession<MyKey, MyValue, MyInput, MyOutput, int, MyFunctionsDelete> session;
         private IDevice log, objlog;
 
@@ -27,13 +27,13 @@ namespace FASTER.test
             log = Devices.CreateLogDevice(TestContext.CurrentContext.TestDirectory + "\\GenericIterationTests.log", deleteOnClose: true);
             objlog = Devices.CreateLogDevice(TestContext.CurrentContext.TestDirectory + "\\GenericIterationTests.obj.log", deleteOnClose: true);
 
-            fht = new FasterKV<MyKey, MyValue, MyInput, MyOutput, int, MyFunctionsDelete>
-                (128, new MyFunctionsDelete(),
+            fht = new FasterKV<MyKey, MyValue>
+                (128,
                 logSettings: new LogSettings { LogDevice = log, ObjectLogDevice = objlog, MutableFraction = 0.1, MemorySizeBits = 14, PageSizeBits = 9 },
                 checkpointSettings: new CheckpointSettings { CheckPointType = CheckpointType.FoldOver },
                 serializerSettings: new SerializerSettings<MyKey, MyValue> { keySerializer = () => new MyKeySerializer(), valueSerializer = () => new MyValueSerializer() }
                 );
-            session = fht.NewSession();
+            session = fht.For(new MyFunctionsDelete()).NewSession<MyFunctionsDelete>();
         }
 
         [TearDown]
@@ -49,7 +49,7 @@ namespace FASTER.test
         [Test]
         public void GenericIterationTest1()
         {
-            using var session = fht.NewSession();
+            using var session = fht.For(new MyFunctionsDelete()).NewSession<MyFunctionsDelete>();
 
             const int totalRecords = 2000;
             var start = fht.Log.TailAddress;
@@ -58,7 +58,7 @@ namespace FASTER.test
             {
                 var key1 = new MyKey { key = i };
                 var value = new MyValue { value = i };
-                session.Upsert(ref key1, ref value, 0, 0);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             int count = 0;
@@ -77,7 +77,7 @@ namespace FASTER.test
             {
                 var key1 = new MyKey { key = i };
                 var value = new MyValue { value = 2 * i };
-                session.Upsert(ref key1, ref value, 0, 1);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;
@@ -91,12 +91,11 @@ namespace FASTER.test
 
             Assert.IsTrue(count == totalRecords);
 
-
             for (int i = totalRecords / 2; i < totalRecords; i++)
             {
                 var key1 = new MyKey { key = i };
                 var value = new MyValue { value = i };
-                session.Upsert(ref key1, ref value, 0, 0);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;
@@ -113,7 +112,7 @@ namespace FASTER.test
             {
                 var key1 = new MyKey { key = i };
                 var value = new MyValue { value = i };
-                session.Upsert(ref key1, ref value, 0, 0);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;
@@ -130,7 +129,7 @@ namespace FASTER.test
             {
                 var key1 = new MyKey { key = i };
                 var value = new MyValue { value = i };
-                session.Delete(ref key1, 0, 0);
+                session.Delete(ref key1, 0);
             }
 
             count = 0;
@@ -143,12 +142,11 @@ namespace FASTER.test
 
             Assert.IsTrue(count == totalRecords / 2);
 
-
             for (int i = 0; i < totalRecords; i++)
             {
                 var key1 = new MyKey { key = i };
                 var value = new MyValue { value = 3 * i };
-                session.Upsert(ref key1, ref value, 0, 1);
+                session.Upsert(ref key1, ref value, 0);
             }
 
             count = 0;

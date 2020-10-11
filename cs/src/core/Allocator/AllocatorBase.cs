@@ -484,6 +484,10 @@ namespace FASTER.core
         /// <param name="flushCallback"></param>
         public AllocatorBase(LogSettings settings, IFasterEqualityComparer<Key> comparer, Action<long, long> evictCallback, LightEpoch epoch, Action<CommitInfo> flushCallback)
         {
+            if (settings.LogDevice == null)
+            {
+                throw new FasterException("LogSettings.LogDevice needs to be specified (e.g., use Devices.CreateLogDevice, AzureStorageDevice, or NullDevice)");
+            }
             if (evictCallback != null)
             {
                 ReadCache = true;
@@ -533,11 +537,6 @@ namespace FASTER.core
             if (SegmentSize < PageSize)
                 throw new FasterException("Segment must be at least of page size");
 
-            if (BufferSize < 1)
-            {
-                throw new FasterException("Log buffer must be of size at least 1 page");
-            }
-
             PageStatusIndicator = new FullPageStatus[BufferSize];
             PendingFlush = new PendingFlushList[BufferSize];
             for (int i = 0; i < BufferSize; i++)
@@ -558,15 +557,18 @@ namespace FASTER.core
 
             bufferPool = new SectorAlignedBufferPool(1, sectorSize);
 
-            long tailPage = firstValidAddress >> LogPageSizeBits;
-            int tailPageIndex = (int)(tailPage % BufferSize);
-            AllocatePage(tailPageIndex);
-
-            // Allocate next page as well
-            int nextPageIndex = (int)(tailPage + 1) % BufferSize;
-            if ((!IsAllocated(nextPageIndex)))
+            if (BufferSize > 0)
             {
-                AllocatePage(nextPageIndex);
+                long tailPage = firstValidAddress >> LogPageSizeBits;
+                int tailPageIndex = (int)(tailPage % BufferSize);
+                AllocatePage(tailPageIndex);
+
+                // Allocate next page as well
+                int nextPageIndex = (int)(tailPage + 1) % BufferSize;
+                if ((!IsAllocated(nextPageIndex)))
+                {
+                    AllocatePage(nextPageIndex);
+                }
             }
 
             if (PreallocateLog)
@@ -1114,7 +1116,8 @@ namespace FASTER.core
         /// <param name="tailAddress"></param>
         /// <param name="headAddress"></param>
         /// <param name="beginAddress"></param>
-        public void RecoveryReset(long tailAddress, long headAddress, long beginAddress)
+        /// <param name="readonlyAddress"></param>
+        public void RecoveryReset(long tailAddress, long headAddress, long beginAddress, long readonlyAddress)
         {
             long tailPage = GetPage(tailAddress);
             long offsetInPage = GetOffsetInPage(tailAddress);
@@ -1132,9 +1135,9 @@ namespace FASTER.core
             HeadAddress = headAddress;
             SafeHeadAddress = headAddress;
             ClosedUntilAddress = headAddress;
-            FlushedUntilAddress = tailAddress;
-            ReadOnlyAddress = tailAddress;
-            SafeReadOnlyAddress = tailAddress;
+            FlushedUntilAddress = readonlyAddress;
+            ReadOnlyAddress = readonlyAddress;
+            SafeReadOnlyAddress = readonlyAddress;
 
             // for the last page which contains tailoffset, it must be open
             pageIndex = GetPageIndexForAddress(tailAddress);
