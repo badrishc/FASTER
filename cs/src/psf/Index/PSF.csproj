@@ -58,24 +58,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\core\Allocator\**\*.cs">
-        <Link>core\Allocator\%(RecursiveDir)%(FileName)%(Extension)</Link>
-    </Compile>
-    <Compile Include="..\..\core\ClientSession\**\*.cs">
-        <Link>core\ClientSession\%(RecursiveDir)%(FileName)%(Extension)</Link>
-    </Compile>
-    <Compile Include="..\..\core\Device\**\*.cs">
-        <Link>core\Device\%(RecursiveDir)%(FileName)%(Extension)</Link>
-    </Compile>
-    <Compile Include="..\..\core\Epochs\**\*.cs">
-        <Link>core\Epochs\%(RecursiveDir)%(FileName)%(Extension)</Link>
-    </Compile>
-    <Compile Include="..\..\core\Index\**\*.cs">
-        <Link>core\Index\%(RecursiveDir)%(FileName)%(Extension)</Link>
-    </Compile>
-    <Compile Include="..\..\core\Utilities\**\*.cs">
-        <Link>core\Utilities\%(RecursiveDir)%(FileName)%(Extension)</Link>
-    </Compile>
+    <ProjectReference Include="..\..\core\FASTER.core.csproj" />
   </ItemGroup>
 
 </Project>

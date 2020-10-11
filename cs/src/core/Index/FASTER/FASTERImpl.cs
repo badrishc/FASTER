@@ -138,11 +138,11 @@ namespace FASTER.core
                                                 out logicalAddress,
                                                 out physicalAddress);
                     }
-                }
 
-                // If skipKeyVerification, we do not have the key in the call and must use the key from the record.
-                if (pendingContext.skipKeyVerification)
-                    key = ref hlog.GetKey(physicalAddress);
+                    // If skipKeyVerification, we do not have the key in the call and must use the key from the record.
+                    if (pendingContext.skipKeyVerification && logicalAddress >= hlog.HeadAddress)
+                        key = ref hlog.GetKey(physicalAddress);
+                }
             }
             else
             {
@@ -221,7 +221,8 @@ namespace FASTER.core
         CreatePendingContext:
             {
                 pendingContext.type = OperationType.READ;
-                pendingContext.key = hlog.GetKeyContainer(ref key);
+                if (!pendingContext.skipKeyVerification)    // If this is true, we don't have a valid key
+                    pendingContext.key = hlog.GetKeyContainer(ref key);
                 pendingContext.input = input;
                 pendingContext.output = output;
                 pendingContext.userContext = userContext;
@@ -1230,7 +1231,8 @@ namespace FASTER.core
                 if (recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                fasterSession.SingleReader(ref pendingContext.key.Get(),ref pendingContext.input, ref hlog.GetContextRecordValue(ref request), ref pendingContext.output, request.logicalAddress);
+                fasterSession.SingleReader(ref pendingContext.key.Get(), ref pendingContext.input,
+                                           ref hlog.GetContextRecordValue(ref request), ref pendingContext.output, request.logicalAddress);
 
                 if (CopyReadsToTail || UseReadCache)
                 {
@@ -1461,7 +1463,7 @@ namespace FASTER.core
                 {
                     fasterSession.InitialUpdater(ref key,
                                              ref pendingContext.input,
-                                             ref hlog.GetValue(newPhysicalAddress));
+                                             ref hlog.GetValue(newPhysicalAddress), newLogicalAddress);
                     status = OperationStatus.NOTFOUND;
                 }
                 else
@@ -1469,7 +1471,7 @@ namespace FASTER.core
                     fasterSession.CopyUpdater(ref key,
                                           ref pendingContext.input,
                                           ref hlog.GetContextRecordValue(ref request),
-                                          ref hlog.GetValue(newPhysicalAddress));
+                                          ref hlog.GetValue(newPhysicalAddress), request.logicalAddress, newLogicalAddress);
                     status = OperationStatus.SUCCESS;
                 }
 

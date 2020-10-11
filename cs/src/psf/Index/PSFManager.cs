@@ -85,22 +85,6 @@ namespace PSF.Index
                 await task;
         }
 
-        internal async ValueTask UpsertAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, TProviderData data, TRecordId recordId, 
-                                             PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
-        {
-            if (changeTracker is null || changeTracker.UpdateOp == UpdateOperation.Insert)
-            {
-                // This Upsert was an Insert: For the FasterKV Insert fast path, changeTracker is null.
-                // Fast Insert path: No IPUCache lookup is done for Inserts, so this is called directly here.
-                await WhenAll(this.psfGroups.Values.Select(group => group.ExecuteAsync(psfSession.GetGroupSession(group), data, recordId, PSFExecutePhase.Insert,
-                              changeTracker, waitForCommit, cancellationToken)));
-                return;
-            }
-
-            // This Upsert was an IPU or RCU
-            await this.UpdateAsync(psfSession, changeTracker, waitForCommit, cancellationToken);
-        }
-
         internal PSFStatus Update(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
         {
             foreach (var group in this.psfGroups.Values)
@@ -114,9 +98,9 @@ namespace PSF.Index
             return PSFStatus.OK;
         }
 
-        internal ValueTask UpdateAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit,
+        internal ValueTask UpdateAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker, 
                                        CancellationToken cancellationToken) 
-            => WhenAll(this.psfGroups.Values.Select(group => group.UpdateAsync(psfSession.GetGroupSession(group), changeTracker, waitForCommit, cancellationToken)));
+            => WhenAll(this.psfGroups.Values.Select(group => group.UpdateAsync(psfSession.GetGroupSession(group), changeTracker, cancellationToken)));
 
         internal PSFStatus Delete(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
         {
@@ -131,10 +115,6 @@ namespace PSF.Index
             return PSFStatus.OK;
         }
 
-        internal ValueTask DeleteAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit,
-                                       CancellationToken cancellationToken)
-            => WhenAll(this.psfGroups.Values.Select(group => group.DeleteAsync(psfSession.GetGroupSession(group), changeTracker, waitForCommit, cancellationToken)));
-
         internal bool CompletePending(PSFIndexSession<TProviderData, TRecordId> psfSession, bool spinWait = false, bool spinWaitForCommit = false)
             // TODO parallelize group CompletePending
             => this.psfGroups.Values.Aggregate(true, (result, group) => group.CompletePending(psfSession.GetGroupSession(group), spinWait, spinWaitForCommit) && result);
@@ -142,10 +122,22 @@ namespace PSF.Index
         internal async ValueTask CompletePendingAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, bool waitForCommit = false, CancellationToken cancellationToken = default)
         {
             foreach (var task in this.psfGroups.Values.Select(group => group.CompletePendingAsync(psfSession.GetGroupSession(group), waitForCommit, cancellationToken))
-                .Where(task => !task.IsCompletedSuccessfully))
-            {
+                                                      .Where(task => !task.IsCompletedSuccessfully))
                 await task;
-            }
+        }
+
+        internal async ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default)
+        {
+            foreach (var task in this.psfGroups.Values.Select(group => group.ReadyToCompletePendingAsync(cancellationToken))
+                                                      .Where(task => !task.IsCompletedSuccessfully))
+                await task;
+        }
+
+        internal async ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default)
+        {
+            foreach (var task in this.psfGroups.Values.Select(group => group.WaitForCommitAsync(cancellationToken))
+                                                      .Where(task => !task.IsCompletedSuccessfully))
+                await task;
         }
 
         /// <summary>

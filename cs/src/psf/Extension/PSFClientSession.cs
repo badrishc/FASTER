@@ -9,7 +9,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
-using FASTER.core;
 using System.Linq;
 
 namespace FASTER.PSF
@@ -70,7 +69,7 @@ namespace FASTER.PSF
                 // Start initially by reading the key; then previousAddress will be updated on each loop iteration and will be used for the following iteration.
                 input.logAccessor = null;
                 FC.RecordInfo recordInfo = default;
-                context.output.currentAddress = Constants.kInvalidAddress;
+                context.output.currentAddress = FC.Constants.kInvalidAddress;
  
                 while (true)
                 {
@@ -851,36 +850,8 @@ namespace FASTER.PSF
             return status;
         }
 
-
-        // TODO remove UpsertAsync, DeleteAsync
-
-
         /// <inheritdoc/>
-        /// <inheritdoc/>
-        public ValueTask UpsertAsync(ref TKVKey key, ref TKVValue desiredValue, TContext context = default, bool waitForCommit = false, CancellationToken cancellationToken = default)
-            => this.CompleteUpsertAsync(this.fkvSession.UpsertAsync(ref key, ref desiredValue, context, waitForCommit, cancellationToken),
-                                        new FasterKVProviderData<TKVKey, TKVValue>(this.fkvLogAccessor.GetKeyContainer(ref key),
-                                                                                   this.fkvLogAccessor.GetValueContainer(ref desiredValue)),
-                                        waitForCommit, cancellationToken);
-
-        private async ValueTask CompleteUpsertAsync(ValueTask primaryFkvValueTask, FasterKVProviderData<TKVKey, TKVValue> insertData, bool waitForCommit, CancellationToken cancellationToken)
-        {
-            if (!primaryFkvValueTask.IsCompletedSuccessfully)
-                await primaryFkvValueTask;
-
-            var providerData = this.wrapperFunctions.ChangeTracker is null ? insertData : this.wrapperFunctions.ChangeTracker.AfterData;
-            await this.psfSession.UpsertAsync(providerData, this.wrapperFunctions.LogicalAddress, this.wrapperFunctions.ChangeTracker, waitForCommit, cancellationToken);
-        }
-
-        /// <summary>
-        /// RMW operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <param name="userContext"></param>
-        /// <param name="serialNo"></param>
-        /// <returns></returns>
-        public FC.Status RMW(ref TKVKey key, ref TInput input, TContext userContext, long serialNo)
+        public FC.Status RMW(ref TKVKey key, ref TInput input, TContext userContext = default, long serialNo = 0)
         {
             var status = this.fkvSession.RMW(ref key, ref input, userContext, serialNo);
             if (status == FC.Status.OK || status == FC.Status.NOTFOUND) // TODO handle pending
@@ -891,19 +862,23 @@ namespace FASTER.PSF
         }
 
         /// <inheritdoc/>
-        public FC.Status RMW(ref TKVKey key, ref TInput input) => this.RMW(ref key, ref input, default, 0);
+        public FC.Status RMW(TKVKey key, TInput input, TContext userContext = default, long serialNo = 0) => RMW(ref key, ref input, userContext, serialNo);
 
         /// <inheritdoc/>
-        public ValueTask RMWAsync(ref TKVKey key, ref TInput input, TContext context = default, bool waitForCommit = false, CancellationToken cancellationToken = default)
-            => this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, waitForCommit, cancellationToken), waitForCommit, cancellationToken);
+        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> RMWAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
+            => this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
 
-        private async ValueTask CompleteRMWAsync(ValueTask primaryFkvValueTask, bool waitForCommit, CancellationToken cancellationToken)
+        private async ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> CompleteRMWAsync(ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> primaryFkvValueTask,
+                                                                                                                                   CancellationToken cancellationToken)
         {
-            if (!primaryFkvValueTask.IsCompletedSuccessfully)
-                await primaryFkvValueTask;
-
-            await this.psfSession.UpdateAsync(this.wrapperFunctions.ChangeTracker, waitForCommit, cancellationToken);
+            var rmwAsyncResult = await primaryFkvValueTask;
+            await this.psfSession.UpdateAsync(this.wrapperFunctions.ChangeTracker, cancellationToken);
+            return rmwAsyncResult;
         }
+
+        /// <inheritdoc/>
+        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> RMWAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
+            => RMWAsync(ref key, ref input, context, serialNo, cancellationToken);
 
         /// <summary>
         /// Delete operation
@@ -926,27 +901,10 @@ namespace FASTER.PSF
         /// Delete operation
         /// </summary>
         /// <param name="key"></param>
+        /// <param name="userContext"></param>
+        /// <param name="serialNo"></param>
         /// <returns></returns>
-        public FC.Status Delete(ref TKVKey key) => this.Delete(ref key, default, 0);
-
-        /// <summary>
-        /// Async delete operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="context"></param>
-        /// <param name="waitForCommit"></param>
-        /// <param name="cancellationToken"></param>
-        /// <returns></returns>
-        public ValueTask DeleteAsync(ref TKVKey key, TContext context = default, bool waitForCommit = false, CancellationToken cancellationToken = default)
-            => this.CompleteDeleteAsync(this.fkvSession.DeleteAsync(ref key, context, waitForCommit, cancellationToken), waitForCommit, cancellationToken);
-
-        private async ValueTask CompleteDeleteAsync(ValueTask primaryFkvValueTask, bool waitForCommit, CancellationToken cancellationToken)
-        {
-            if (!primaryFkvValueTask.IsCompletedSuccessfully)
-                await primaryFkvValueTask;
-
-            await this.psfSession.DeleteAsync(this.wrapperFunctions.ChangeTracker, waitForCommit, cancellationToken);
-        }
+        public FC.Status Delete(TKVKey key, TContext userContext, long serialNo) => this.Delete(ref key, userContext, serialNo);
 
         /// <summary>
         /// Get list of pending requests (for current session)
@@ -992,16 +950,25 @@ namespace FASTER.PSF
         /// Check if at least one request is ready for CompletePending to be called on
         /// Returns completed immediately if there are no outstanding requests
         /// </summary>
-        /// <param name="token"></param>
+        /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        public ValueTask ReadyToCompletePendingAsync(CancellationToken token = default) => this.fkvSession.ReadyToCompletePendingAsync(token);
+        public async ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default)
+        {
+            await this.fkvSession.ReadyToCompletePendingAsync(cancellationToken);
+            await this.psfSession.ReadyToCompletePendingAsync(cancellationToken);
+        }
 
         /// <summary>
         /// Wait for commit of all operations completed until the current point in session.
         /// Does not itself issue checkpoint/commits.
         /// </summary>
+        /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        public ValueTask WaitForCommitAsync(CancellationToken token = default) => this.fkvSession.WaitForCommitAsync(token);
+        public async ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default)
+        {
+            await this.fkvSession.WaitForCommitAsync(cancellationToken);
+            await this.psfSession.WaitForCommitAsync(cancellationToken);
+        }
 
         /// <inheritdoc/>
         public void Dispose() => this.fkvSession.Dispose();

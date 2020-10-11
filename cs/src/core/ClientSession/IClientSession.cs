@@ -207,15 +207,14 @@ namespace FASTER.core
         public Status Upsert(ref Key key, ref Value desiredValue, Context userContext = default, long serialNo = 0);
 
         /// <summary>
-        /// Upsert operation
+        /// RMW operation
         /// </summary>
         /// <param name="key"></param>
-        /// <param name="desiredValue"></param>
-        /// <param name="context"></param>
-        /// <param name="waitForCommit"></param>
-        /// <param name="token"></param>
+        /// <param name="input"></param>
+        /// <param name="userContext"></param>
+        /// <param name="serialNo"></param>
         /// <returns></returns>
-        public ValueTask UpsertAsync(ref Key key, ref Value desiredValue, Context context = default, bool waitForCommit = false, CancellationToken token = default);
+        public Status RMW(ref Key key, ref Input input, Context userContext = default, long serialNo = 0);
 
         /// <summary>
         /// RMW operation
@@ -225,15 +224,7 @@ namespace FASTER.core
         /// <param name="userContext"></param>
         /// <param name="serialNo"></param>
         /// <returns></returns>
-        public Status RMW(ref Key key, ref Input input, Context userContext, long serialNo);
-
-        /// <summary>
-        /// RMW operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="input"></param>
-        /// <returns></returns>
-        public Status RMW(ref Key key, ref Input input);
+        public Status RMW(Key key, Input input, Context userContext = default, long serialNo = 0);
 
         /// <summary>
         /// Async RMW operation
@@ -242,10 +233,22 @@ namespace FASTER.core
         /// <param name="key"></param>
         /// <param name="input"></param>
         /// <param name="context"></param>
-        /// <param name="waitForCommit"></param>
+        /// <param name="serialNo"></param>
         /// <param name="token"></param>
         /// <returns></returns>
-        public ValueTask RMWAsync(ref Key key, ref Input input, Context context = default, bool waitForCommit = false, CancellationToken token = default);
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default);
+
+        /// <summary>
+        /// Async RMW operation
+        /// Await operation in session before issuing next one
+        /// </summary>
+        /// <param name="key"></param>
+        /// <param name="input"></param>
+        /// <param name="context"></param>
+        /// <param name="serialNo"></param>
+        /// <param name="token"></param>
+        /// <returns></returns>
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default);
 
         /// <summary>
         /// Delete operation
@@ -260,18 +263,10 @@ namespace FASTER.core
         /// Delete operation
         /// </summary>
         /// <param name="key"></param>
+        /// <param name="userContext"></param>
+        /// <param name="serialNo"></param>
         /// <returns></returns>
-        public Status Delete(ref Key key);
-
-        /// <summary>
-        /// Async delete operation
-        /// </summary>
-        /// <param name="key"></param>
-        /// <param name="waitForCommit"></param>
-        /// <param name="context"></param>
-        /// <param name="token"></param>
-        /// <returns></returns>
-        public ValueTask DeleteAsync(ref Key key, Context context = default, bool waitForCommit = false, CancellationToken token = default);
+        public Status Delete(Key key, Context userContext, long serialNo);
 
         /// <summary>
         /// Get list of pending requests (for current session)

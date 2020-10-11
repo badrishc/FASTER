@@ -70,6 +70,21 @@ namespace PSF.Index
         internal ValueTask CompletePendingAsync(IDisposable sessionObj, bool waitForCommit, CancellationToken cancellationToken);
 
         /// <summary>
+        /// Check if at least one request is ready for CompletePending to be called on
+        /// Returns completed immediately if there are no outstanding requests
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        internal ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Wait for commit of all operations completed until the current point in session.
+        /// Does not itself issue checkpoint/commits.
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        internal ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// The identifier of this <see cref="PSFGroup{TProviderData, TPSFKey, TRecordId}"/>.
         /// </summary>
         long Id { get; }
@@ -82,7 +97,6 @@ namespace PSF.Index
 
         /// <summary>
         /// Update the RecordId
-        /// <param name="changeTracker">The record of previous key values and updated values</param>
         /// </summary>
         /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
         /// <param name="changeTracker">The record of previous key values and updated values</param>
@@ -92,27 +106,16 @@ namespace PSF.Index
         /// Update the RecordId
         /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
         /// <param name="changeTracker">The record of previous key values and updated values</param>
-        /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
         /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
         /// </summary>
-        ValueTask UpdateAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken);
+        ValueTask UpdateAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken);
 
         /// <summary>
         /// Delete the RecordId
-        /// <param name="changeTracker">The record of previous key values and updated values</param>
         /// </summary>
         /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
         /// <param name="changeTracker">The record of previous key values and updated values</param>
         Status Delete(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker);
-
-        /// <summary>
-        /// Delete the RecordId
-        /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
-        /// <param name="changeTracker">The record of previous key values and updated values</param>
-        /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
-        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
-        /// </summary>
-        ValueTask DeleteAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken);
 
         /// <summary>
         /// Grow the hash index

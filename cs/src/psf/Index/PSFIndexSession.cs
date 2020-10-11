@@ -47,18 +47,6 @@ namespace PSF.Index
             => this.psfManager.Upsert(this, data, recordId, changeTracker);
 
         /// <summary>
-        /// Asynchronously Inserts a new PSF key/RecordId, or adds the RecordId to an existing chain
-        /// </summary>
-        /// <param name="data">The provider's data; will be passed to the PSF execution</param>
-        /// <param name="recordId">The record Id to be stored for any matching PSFs</param>
-        /// <param name="changeTracker">Tracks changes if this is an existing Key/RecordId entry</param>
-        /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
-        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
-        /// <returns>A status code indicating the result of the operation</returns>
-        public ValueTask UpsertAsync(TProviderData data, TRecordId recordId, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
-            => this.psfManager.UpsertAsync(this, data, recordId, changeTracker, waitForCommit, cancellationToken);
-
-        /// <summary>
         /// Updates a PSF key/RecordId entry, possibly by RCU (Read-Copy-Update)
         /// </summary>
         /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
@@ -70,11 +58,10 @@ namespace PSF.Index
         /// Asynchronously Updates a PSF key/RecordId entry, possibly by RCU (Read-Copy-Update)
         /// </summary>
         /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
-        /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
         /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
         /// <returns>A status code indicating the result of the operation</returns>
-        public ValueTask UpdateAsync(PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
-            => this.psfManager.UpdateAsync(this, changeTracker, waitForCommit, cancellationToken);
+        public ValueTask UpdateAsync(PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken)
+            => this.psfManager.UpdateAsync(this, changeTracker, cancellationToken);
 
         /// <summary>
         /// Deletes a PSF key/RecordId entry from the chain, possibly by insertion of a "marked deleted" record
@@ -84,16 +71,6 @@ namespace PSF.Index
         public PSFStatus Delete(PSFChangeTracker<TProviderData, TRecordId> changeTracker)
             => this.psfManager.Delete(this, changeTracker);
 
-        /// <summary>
-        /// Deletes a PSF key/RecordId entry from the chain, possibly by insertion of a "marked deleted" record
-        /// </summary>
-        /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
-        /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
-        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
-        /// <returns>A status code indicating the result of the operation</returns>
-        public ValueTask DeleteAsync(PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
-            => this.psfManager.DeleteAsync(this, changeTracker, waitForCommit, cancellationToken);
-        
         #endregion PSF Updates
 
         #region Complete pending operations
@@ -115,6 +92,20 @@ namespace PSF.Index
         /// <returns></returns>
         public ValueTask CompletePendingAsync(bool waitForCommit = false, CancellationToken cancellationToken = default)
             => this.psfManager.CompletePendingAsync(this, waitForCommit, cancellationToken);
+
+        /// <summary>
+        /// Check if at least one request is ready for CompletePending to be called on
+        /// Returns completed immediately if there are no outstanding requests
+        /// </summary>
+        public ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default)
+            => this.psfManager.ReadyToCompletePendingAsync(cancellationToken);
+
+        /// <summary>
+        /// Wait for commit of all operations completed until the current point in session.
+        /// Does not itself issue checkpoint/commits.
+        /// </summary>
+        public ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default)
+            => this.psfManager.WaitForCommitAsync(cancellationToken);
 
         #endregion Complete pending operations
 

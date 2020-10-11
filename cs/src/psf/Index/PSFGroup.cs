@@ -1,7 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-using FASTER.core;
+extern alias FasterCore;
+
+using FC = FasterCore::FASTER.core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,7 +25,7 @@ namespace PSF.Index
         where TPSFKey : struct
         where TRecordId : struct, IComparable<TRecordId>
     {
-        internal FasterKV<TPSFKey, TRecordId> fht;
+        internal FC.FasterKV<TPSFKey, TRecordId> fht;
         internal IPSFDefinition<TProviderData, TPSFKey>[] psfDefinitions;
         private readonly PSFRegistrationSettings<TPSFKey> regSettings;
 
@@ -32,8 +34,8 @@ namespace PSF.Index
         /// </summary>
         public long Id { get; }
 
-        private readonly CheckpointSettings checkpointSettings;
-        private readonly int keyPointerSize = Utility.GetSize(default(KeyPointer<TPSFKey>));
+        private readonly FC.CheckpointSettings checkpointSettings;
+        private readonly int keyPointerSize = FC.Utility.GetSize(default(KeyPointer<TPSFKey>));
         private readonly int recordIdSize = (Utility.GetSize(default(TRecordId)) + sizeof(long) - 1) & ~(sizeof(long) - 1);
 
         /// <summary>
@@ -340,20 +342,6 @@ namespace PSF.Index
             return this.ExecuteAndStore(sessionObj, changeTracker.BeforeData, default, PSFExecutePhase.Delete, changeTracker);
         }
 
-        /// <summary>
-        /// Delete the RecordId
-        /// </summary>
-        public ValueTask DeleteAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
-        {
-            changeTracker.CachedBeforeLA = Constants.kInvalidAddress; // TODOcache: Find BeforeRecordId in IPUCache
-            if (changeTracker.CachedBeforeLA != Constants.kInvalidAddress)
-            {
-                // TODOcache: Tombstone it, and possibly unlink; or just copy its keys into changeTracker.Before.
-                // If the latter, we can bypass ExecuteAndStore's PSF-execute loop
-            }
-            return this.ExecuteAsync(sessionObj, changeTracker.BeforeData, default, PSFExecutePhase.Delete, changeTracker, waitForCommit, cancellationToken);
-        }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private unsafe PSFInput<TPSFKey> MakeQueryInput(int psfOrdinal, ref TPSFKey key)
         {
@@ -473,11 +461,12 @@ namespace PSF.Index
         /// <inheritdoc/>
         public bool CompletePending(bool spinWait, bool spinWaitForCommit);     // TODO: Resolve issues with non-async operations in groups
 
-        /// <summary>
-        /// Complete all outstanding pending operations asynchronously
-        /// </summary>
         /// <inheritdoc/>
-        ValueTask CompletePendingAsync(bool waitForCommit, CancellationToken token);     // TODO: Resolve issues with non-async operations in groups
+        public ValueTask CompletePendingAsync(bool waitForCommit, CancellationToken token);     // TODO: Resolve issues with non-async operations in groups
+
+        internal ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken);
+
+        internal ValueTask WaitForCommitAsync(CancellationToken cancellationToken);
 
         #region Checkpoint Operations
         /// <inheritdoc/>

@@ -105,6 +105,8 @@ namespace FASTER.PSF
             SetBeforeData(ref key, logicalAddress, isIpu: false);
             this.ChangeTracker.UpdateOp = UpdateOperation.Insert;
         }
+        public bool NeedCopyUpdate(ref TKVKey key, ref Input input, ref TKVValue oldValue)
+            => this.userFunctions.NeedCopyUpdate(ref key, ref input, ref oldValue);
         public void CopyUpdater(ref TKVKey key, ref Input input, ref TKVValue oldValue, ref TKVValue newValue, long oldLogicalAddress, long newLogicalAddress)
         {
             // The old record was valid but not in mutable range, so this is an RCU
@@ -125,8 +127,8 @@ namespace FASTER.PSF
             return false;
         }
 
-        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, FC.Status status, long previousAddress)
-            => this.userFunctions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, previousAddress);
+        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, FC.Status status, FC.RecordInfo recordInfo)
+            => this.userFunctions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
         public void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, FC.Status status)
             => this.userFunctions.RMWCompletionCallback(ref key, ref input, ctx, status);
         public void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx)
