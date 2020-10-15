@@ -1,31 +1,29 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-extern alias FasterCore;
-
-using FC = FasterCore::FASTER.core;
 using FASTER.core;
 using PSF.Index;
 using System.Runtime.CompilerServices;
 
 namespace FASTER.PSF
 {
-    internal class LivenessFunctions<TKVKey, TKVValue> : FC.IFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>
+    internal class LivenessFunctions<TKVKey, TKVValue> : IFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, 
+                                                         LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>
     {
         public struct Input
         {
-            internal FC.LogAccessor<TKVKey, TKVValue> logAccessor;
+            internal LogAccessor<TKVKey, TKVValue> logAccessor;
         }
 
         public struct Output
         {
-            private FC.IHeapContainer<TKVKey> keyContainer;
-            private FC.IHeapContainer<TKVValue> valueContainer;
+            private IHeapContainer<TKVKey> keyContainer;
+            private IHeapContainer<TKVValue> valueContainer;
             internal long currentAddress;
-            internal FC.RecordInfo recordInfo;
+            internal RecordInfo recordInfo;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal void SetHeapContainers(FC.IHeapContainer<TKVKey> kc, FC.IHeapContainer<TKVValue> vc)
+            internal void SetHeapContainers(IHeapContainer<TKVKey> kc, IHeapContainer<TKVValue> vc)
             {
                 this.keyContainer = kc;
                 this.valueContainer = vc;
@@ -34,7 +32,7 @@ namespace FASTER.PSF
             internal ref TKVKey GetKey() => ref this.keyContainer.Get();
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            internal void DetachHeapContainers(out FC.IHeapContainer<TKVKey> kc, out FC.IHeapContainer<TKVValue> vc)
+            internal void DetachHeapContainers(out IHeapContainer<TKVKey> kc, out IHeapContainer<TKVValue> vc)
             {
                 kc = this.keyContainer;
                 this.keyContainer = null;
@@ -63,12 +61,12 @@ namespace FASTER.PSF
         public class Context
         {
             internal Output output;
-            internal FC.Status status;
+            internal Status status;
             
             internal Context()
             {
                 this.output.recordInfo = default;
-                this.status = FC.Status.OK;
+                this.status = Status.OK;
             }
         }
 
@@ -94,7 +92,7 @@ namespace FASTER.PSF
                 output.currentAddress = logicalAddress;
         }
 
-        public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, FC.Status status, FC.RecordInfo recordInfo)
+        public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
         {
             ctx.output.Set(ref output);
             ctx.output.recordInfo = recordInfo;
@@ -110,13 +108,14 @@ namespace FASTER.PSF
         public virtual void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
 
         public virtual void InitialUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
+        public virtual bool NeedCopyUpdate(ref TKVKey key, ref Input input, ref TKVValue value) => throw new PSFInternalErrorException(errorMsg);
         public virtual void CopyUpdater(ref TKVKey key, ref Input input, ref TKVValue oldValue, ref TKVValue newValue, long oldLogicalAddress, long newLogicalAddress) => throw new PSFInternalErrorException(errorMsg);
         public virtual bool InPlaceUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
 
-        public virtual void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, FC.Status status) => throw new PSFInternalErrorException(errorMsg);
+        public virtual void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, Status status) => throw new PSFInternalErrorException(errorMsg);
         public virtual void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx) => throw new PSFInternalErrorException(errorMsg);
         public virtual void DeleteCompletionCallback(ref TKVKey key, Context ctx) => throw new PSFInternalErrorException(errorMsg);
-        public virtual void CheckpointCompletionCallback(string sessionId, FC.CommitPoint commitPoint) => throw new PSFInternalErrorException(errorMsg);
+        public virtual void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) => throw new PSFInternalErrorException(errorMsg);
         #endregion Unsupported IFunctions operations
     }
 }

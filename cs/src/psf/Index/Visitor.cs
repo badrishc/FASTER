@@ -4,168 +4,120 @@
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 
 using FASTER.core;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 
 namespace PSF.Index
 {
-    // Non-generic interface
-    internal interface IPSFFunctions { }
-
-    internal interface IPSFFunctions<TKey, TValue, TInput, TOutput> : IPSFFunctions
+    internal unsafe partial class PSFSecondaryFasterKV<TPSFKey, TRecordId> : FasterKV<TPSFKey, TRecordId>
     {
-        #region Input accessors
-
-        long GroupId(ref TInput input);
-
-        bool IsDelete(ref TInput input);
-        bool SetDelete(ref TInput input, bool value);
-
-        public long ReadLogicalAddress(ref TInput input);
-
-        public ref TKey QueryKeyRef(ref TInput input);
-        #endregion Input accessors
-
-        #region Output visitors
-        PSFOperationStatus VisitPrimaryReadAddress(ref TKey key, ref TValue value, ref TOutput output, bool isConcurrent);
-
-        PSFOperationStatus VisitSecondaryRead(ref TValue value, ref TInput input, ref TOutput output, long physicalAddress, bool tombstone, bool isConcurrent);
-
-        PSFOperationStatus VisitSecondaryRead(ref TKey key, ref TValue value, ref TInput input, ref TOutput output, bool tombstone, bool isConcurrent);
-        #endregion Output visitors
-    }
-
-    /// <summary>
-    /// The Functions for the TRecordId (which is the Value param to the secondary FasterKV); mostly pass-through
-    /// </summary>
-    /// <typeparam name="TKVKey">The type of the user key in the primary Faster KV</typeparam>
-    /// <typeparam name="TKVValue">The type of the user value in the primary Faster KV</typeparam>
-    internal class PSFPrimaryFunctions<TKVKey, TKVValue> : StubbedFunctions<TKVKey, TKVValue, PSFInputPrimaryReadAddress, PSFOutputPrimaryReadAddress<TKVKey, TKVValue>>,
-                                                         IPSFFunctions<TKVKey, TKVValue, PSFInputPrimaryReadAddress, PSFOutputPrimaryReadAddress<TKVKey, TKVValue>>
-    {
-        public long GroupId(ref PSFInputPrimaryReadAddress input) => throw new PSFInternalErrorException("Cannot call this accessor on the primary FKV");
-
-        public bool IsDelete(ref PSFInputPrimaryReadAddress input) => throw new PSFInternalErrorException("Cannot call this accessor on the primary FKV");
-        public bool SetDelete(ref PSFInputPrimaryReadAddress input, bool value) => throw new PSFInternalErrorException("Cannot call this accessor on the primary FKV");
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long ReadLogicalAddress(ref PSFInputPrimaryReadAddress input) => input.ReadLogicalAddress;
-
-        public ref TKVKey QueryKeyRef(ref PSFInputPrimaryReadAddress input) => throw new PSFInternalErrorException("Cannot call this accessor on the primary FKV");
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PSFOperationStatus VisitPrimaryReadAddress(ref TKVKey key, ref TKVValue value, ref PSFOutputPrimaryReadAddress<TKVKey, TKVValue> output, bool isConcurrent)
+        internal interface IInputAccessor<TInput>
         {
-            // Tombstone is not needed here; it is only needed for the chains in the secondary FKV.
-            output.ProviderDatas.Enqueue(new FasterKVProviderData<TKVKey, TKVValue>(output.allocator, ref key, ref value));
-            return new PSFOperationStatus(OperationStatus.SUCCESS);
+            bool IsDelete(ref TInput input);
+            bool SetDelete(ref TInput input, bool value);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PSFOperationStatus VisitSecondaryRead(ref TKVValue value, ref PSFInputPrimaryReadAddress input, ref PSFOutputPrimaryReadAddress<TKVKey, TKVValue> output,
-                                                     long physicalAddress, bool tombstone, bool isConcurrent)
-            => throw new PSFInternalErrorException("Cannot call this form of Visit() on the primary FKV");  // TODO review error messages
-
-        public PSFOperationStatus VisitSecondaryRead(ref TKVKey key, ref TKVValue value, ref PSFInputPrimaryReadAddress input, ref PSFOutputPrimaryReadAddress<TKVKey, TKVValue> output,
-                                                          bool tombstone, bool isConcurrent)
-            => throw new PSFInternalErrorException("Cannot call this form of Visit() on the primary FKV");  // TODO review error messages
-    }
-
-    /// <summary>
-    /// The Functions for the TRecordId (which is the Value param to the secondary FasterKV); mostly pass-through
-    /// </summary>
-    /// <typeparam name="TPSFKey">The type of the <see cref="PSF{TPSFKey, TRecordId}"/> result key</typeparam>
-    /// <typeparam name="TRecordId">The type of the <see cref="PSF{TPSFKey, TRecordId}"/> value</typeparam>
-    public class PSFSecondaryFunctions<TPSFKey, TRecordId> : StubbedFunctions<TPSFKey, TRecordId, PSFInput<TPSFKey>, PSFOutput<TPSFKey, TRecordId>>,
-                                                             IPSFFunctions<TPSFKey, TRecordId, PSFInput<TPSFKey>, PSFOutput<TPSFKey, TRecordId>>
-        where TPSFKey : struct
-        where TRecordId : struct
-    {
-        public long GroupId(ref PSFInput<TPSFKey> input) => input.GroupId;
-
-        public bool IsDelete(ref PSFInput<TPSFKey> input) => input.IsDelete;
-        public bool SetDelete(ref PSFInput<TPSFKey> input, bool value) => input.IsDelete = value;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long ReadLogicalAddress(ref PSFInput<TPSFKey> input) => input.ReadLogicalAddress;
-
-        public ref TPSFKey QueryKeyRef(ref PSFInput<TPSFKey> input) => ref input.QueryKeyRef;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PSFOperationStatus VisitPrimaryReadAddress(ref TPSFKey key, ref TRecordId value, ref PSFOutput<TPSFKey, TRecordId> output, bool isConcurrent)
-            => throw new PSFInternalErrorException("Cannot call this form of Visit() on the secondary FKV");
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PSFOperationStatus VisitSecondaryRead(ref TRecordId value, ref PSFInput<TPSFKey> input, ref PSFOutput<TPSFKey, TRecordId> output,
-                                                     long physicalAddress, bool tombstone, bool isConcurrent)
+        internal class PSFFunctions : IFunctions<TPSFKey, TRecordId, PSFInput, PSFOutput, PSFContext>, IInputAccessor<PSFInput>
         {
-            // This is the secondary FKV; we hold onto the RecordId and create the provider data when QueryPSF returns.
-            output.RecordId = value;
-            output.Tombstone = tombstone;
-            ref KeyPointer<TPSFKey> keyPointer = ref output.keyAccessor.GetKeyPointerRef(physicalAddress);
-            Debug.Assert(keyPointer.PsfOrdinal == input.PsfOrdinal, "Visit found mismatched PSF ordinal");
-            output.PreviousLogicalAddress = keyPointer.PreviousAddress;
-            return new PSFOperationStatus(OperationStatus.SUCCESS);
+            readonly KeyAccessor<TPSFKey> keyAccessor;
+            readonly RecordAccessor<TPSFKey, TRecordId> recordAccessor;
+            internal readonly Queue<PSFOutput> Queue;
+
+            internal PSFFunctions(KeyAccessor<TPSFKey> keyAcc, RecordAccessor<TPSFKey, TRecordId> recordAcc)
+            {
+                this.keyAccessor = keyAcc;
+                this.recordAccessor = recordAcc;
+                this.Queue = new Queue<PSFOutput>();
+            }
+
+            internal void Clear()
+            {
+                // We should have drained any of these remaining, unless there was an error.
+                this.Queue.Clear();
+            }
+
+            #region IInputAccessor
+
+            public bool IsDelete(ref PSFInput input) => input.IsDelete;
+            public bool SetDelete(ref PSFInput input, bool value) => input.IsDelete = value;
+
+            #endregion IInputAccessor
+
+            #region IFunctions implementation
+
+            private const string NotUsedForPSF = "PSF-implementing FasterKVs should not use this IFunctions method";
+
+            #region Upserts
+            public bool ConcurrentWriter(ref TPSFKey _, ref TRecordId src, ref TRecordId dst, long address) => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public void SingleWriter(ref TPSFKey _, ref TRecordId src, ref TRecordId dst, long address) => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public void UpsertCompletionCallback(ref TPSFKey _, ref TRecordId value, PSFContext ctx) => throw new PSFInternalErrorException(NotUsedForPSF);
+#endregion Upserts
+
+            #region Reads
+            public void ConcurrentReader(ref TPSFKey key, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long address)
+            {
+                // Note: ConcurrentReader is not called for ReadCache.
+                Debug.Assert(this.recordAccessor.IsInMemory(address));
+                StoreOutput(ref key, ref input, ref value, ref output, address);
+            }
+
+            private void StoreOutput(ref TPSFKey key, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long address)
+            {
+                if (!recordAccessor.IsLogAddress(address))
+                {
+                    // This is a ReadCache record. Note: ReadCompletionCallback won't be called, so no need to flag it in Output.
+                    return;
+                }
+
+                output.RecordId = value;
+                if (this.recordAccessor.IsInMemory(address))
+                    output.Tombstone = this.recordAccessor.IsTombstone(address);
+
+                ref CompositeKey<TPSFKey> compositeKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref key);
+                ref KeyPointer<TPSFKey> keyPointer = ref this.keyAccessor.GetKeyPointerRef(ref compositeKey, input.PsfOrdinal);
+                Debug.Assert(keyPointer.PsfOrdinal == input.PsfOrdinal, "Visit found mismatched PSF ordinal");
+                output.PreviousLogicalAddress = keyPointer.PreviousAddress;
+            }
+
+            public unsafe void SingleReader(ref TPSFKey key, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long address)
+            {
+                // Note: if !this.recordAccessor.IsInMemory(address), we'll get the RecordInfo in ReadCompletionCallback and set tombstone there.
+                StoreOutput(ref key, ref input, ref value, ref output, address);
+            }
+
+            public void ReadCompletionCallback(ref TPSFKey _, ref PSFInput input, ref PSFOutput output, PSFContext ctx, Status status, RecordInfo recordInfo)
+            {
+                output.Tombstone = recordInfo.Tombstone;
+                this.Queue.Enqueue(output);
+            }
+            #endregion Reads
+
+            #region RMWs
+            public bool NeedCopyUpdate(ref TPSFKey _, ref PSFInput input, ref TRecordId value)
+                => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public void CopyUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId oldValue, ref TRecordId newValue, long oldAddress, long newAddress)
+                => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public void InitialUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId value, long address)
+                => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public bool InPlaceUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId value, long address)
+                => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public void RMWCompletionCallback(ref TPSFKey _, ref PSFInput input, PSFContext ctx, Status status)
+                => throw new PSFInternalErrorException(NotUsedForPSF);
+#endregion RMWs
+
+            public void DeleteCompletionCallback(ref TPSFKey _, PSFContext ctx)
+                => throw new PSFInternalErrorException(NotUsedForPSF);
+
+            public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint)
+            {
+            }
+            #endregion IFunctions implementation
         }
-
-        public PSFOperationStatus VisitSecondaryRead(ref TPSFKey key, ref TRecordId value, ref PSFInput<TPSFKey> input, ref PSFOutput<TPSFKey, TRecordId> output,
-                                                     bool tombstone, bool isConcurrent)
-        {
-            // This is the secondary FKV; we hold onto the RecordId and create the provider data when QueryPSF returns.
-            output.RecordId = value;
-            output.Tombstone = tombstone;
-            ref CompositeKey<TPSFKey> compositeKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref key);
-            ref KeyPointer<TPSFKey> keyPointer = ref output.keyAccessor.GetKeyPointerRef(ref compositeKey, input.PsfOrdinal);
-            Debug.Assert(keyPointer.PsfOrdinal == input.PsfOrdinal, "Visit found mismatched PSF ordinal");
-            output.PreviousLogicalAddress = keyPointer.PreviousAddress;
-            return new PSFOperationStatus(OperationStatus.SUCCESS);
-        }
-    }
-
-    public class StubbedFunctions<TKey, TValue, TInput, TOutput> : IFunctions<TKey, TValue, TInput, TOutput, PSFContext>
-    {
-        // All IFunctions methods are unused; the IFunctions "implementation" is to satisfy the ClientSession requirement. We use only the Visit methods.
-        #region IFunctions stubs
-        private const string MustUseVisitMethod = "PSF-implementing FasterKVs must use one of the Visit* methods";
-
-        #region Upserts
-        public bool ConcurrentWriter(ref TKey _, ref TValue src, ref TValue dst) => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public void SingleWriter(ref TKey _, ref TValue src, ref TValue dst) => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public void UpsertCompletionCallback(ref TKey _, ref TValue value, PSFContext ctx) => throw new PSFInternalErrorException(MustUseVisitMethod);
-        #endregion Upserts
-
-        #region Reads
-        public void ConcurrentReader(ref TKey key, ref TInput input, ref TValue value, ref TOutput dst)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public unsafe void SingleReader(ref TKey _, ref TInput input, ref TValue value, ref TOutput dst)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public void ReadCompletionCallback(ref TKey _, ref TInput input, ref TOutput output, PSFContext ctx, Status status)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-        #endregion Reads
-
-        #region RMWs
-        public void CopyUpdater(ref TKey _, ref TInput input, ref TValue oldValue, ref TValue newValue)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public void InitialUpdater(ref TKey _, ref TInput input, ref TValue value)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public bool InPlaceUpdater(ref TKey _, ref TInput input, ref TValue value)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public void RMWCompletionCallback(ref TKey _, ref TInput input, PSFContext ctx, Status status)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-        #endregion RMWs
-
-        public void DeleteCompletionCallback(ref TKey _, PSFContext ctx)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-
-        public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint)
-            => throw new PSFInternalErrorException(MustUseVisitMethod);
-        #endregion IFunctions stubs
     }
 }

@@ -43,7 +43,7 @@ namespace PSF.Index
         /// <param name="changeTracker">Tracks changes if this is an existing Key/RecordId entry</param>
         /// <returns>A status code indicating the result of the operation</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PSFStatus Upsert(TProviderData data, TRecordId recordId, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
+        public Status Upsert(TProviderData data, TRecordId recordId, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
             => this.psfManager.Upsert(this, data, recordId, changeTracker);
 
         /// <summary>
@@ -51,7 +51,7 @@ namespace PSF.Index
         /// </summary>
         /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
         /// <returns>A status code indicating the result of the operation</returns>
-        public PSFStatus Update(PSFChangeTracker<TProviderData, TRecordId> changeTracker)
+        public Status Update(PSFChangeTracker<TProviderData, TRecordId> changeTracker)
             => this.psfManager.Update(this, changeTracker);
 
         /// <summary>
@@ -68,7 +68,7 @@ namespace PSF.Index
         /// </summary>
         /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
         /// <returns>A status code indicating the result of the operation</returns>
-        public PSFStatus Delete(PSFChangeTracker<TProviderData, TRecordId> changeTracker)
+        public Status Delete(PSFChangeTracker<TProviderData, TRecordId> changeTracker)
             => this.psfManager.Delete(this, changeTracker);
 
         #endregion PSF Updates
@@ -98,14 +98,14 @@ namespace PSF.Index
         /// Returns completed immediately if there are no outstanding requests
         /// </summary>
         public ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default)
-            => this.psfManager.ReadyToCompletePendingAsync(cancellationToken);
+            => this.psfManager.ReadyToCompletePendingAsync(this, cancellationToken);
 
         /// <summary>
         /// Wait for commit of all operations completed until the current point in session.
         /// Does not itself issue checkpoint/commits.
         /// </summary>
         public ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default)
-            => this.psfManager.WaitForCommitAsync(cancellationToken);
+            => this.psfManager.WaitForCommitAsync(this, cancellationToken);
 
         #endregion Complete pending operations
 
@@ -132,9 +132,9 @@ namespace PSF.Index
         /// <param name="key">The <typeparamref name="TPSFKey"/> identifying the records to be retrieved</param>
         /// <param name="querySettings">Options for the PSF query operation</param>
         /// <returns>An async enumeration of the <typeparamref name="TRecordId"/>s matching <paramref name="key"/></returns>
-        public async IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey>(IPSF psf, TPSFKey key, PSFQuerySettings querySettings = null)
+        public IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey>(IPSF psf, TPSFKey key, PSFQuerySettings querySettings = null)
             where TPSFKey : struct
-            => this.psfManager.QueryPSFAsync(this, IPSF psf, TPSFKey key, PSFQuerySettings querySettings);
+            => this.psfManager.QueryPSFAsync(this, psf, key, querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -158,7 +158,7 @@ namespace PSF.Index
         /// <param name="keys">The <typeparamref name="TPSFKey"/>s identifying the records to be retrieved</param>
         /// <param name="querySettings">Options for the PSF query operation</param>
         /// <returns>An async enumeration of the <typeparamref name="TRecordId"/>s matching <paramref name="keys"/></returns>
-        public async IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey>(IPSF psf, IEnumerable<TPSFKey> keys, PSFQuerySettings querySettings = null)
+        public IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey>(IPSF psf, IEnumerable<TPSFKey> keys, PSFQuerySettings querySettings = null)
             where TPSFKey : struct
             => this.psfManager.QueryPSFAsync(this, psf, keys, querySettings);
 

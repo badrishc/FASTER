@@ -1,14 +1,17 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+using FASTER.core;
 namespace PSF.Index
 {
-    /// <summary>
-    /// Context for operations on the secondary FasterKV instance.
-    /// </summary>
-    public class PSFContext
+    internal partial class PSFSecondaryFasterKV<TPSFKey, TRecordId> : FasterKV<TPSFKey, TRecordId>
     {
-        // // TODO Hack because we can't get the functions object from the session, so pass this as context (also hacked to make it a class)
-        internal IPSFFunctions Functions;
+        /// <summary>
+        /// Context for operations on the secondary FasterKV instance.
+        /// </summary>
+        internal class PSFContext
+        {
+            internal PSFFunctions Functions;
+        }
     }
 }

@@ -391,7 +391,8 @@ namespace FASTER.core
                                                      ref pendingContext.input,
                                                      ref pendingContext.output,
                                                      pendingContext.userContext,
-                                                     status);
+                                                     status,
+                                                     pendingContext.recordInfo);
                 }
                 else
                 {

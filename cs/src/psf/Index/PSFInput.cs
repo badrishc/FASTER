@@ -9,61 +9,74 @@ using System.Runtime.CompilerServices;
 
 namespace PSF.Index
 {
-    /// <summary>
-    /// Input to operations on the secondary FasterKV instance (stores PSF chains) for everything
-    /// except reading based on a LogicalAddress.
-    /// </summary>
-    public unsafe struct PSFInput<TPSFKey> : IDisposable
-        where TPSFKey : new()
+    internal unsafe partial class PSFSecondaryFasterKV<TPSFKey, TRecordId> : FasterKV<TPSFKey, TRecordId>
     {
-        private SectorAlignedMemory keyPointerMem;
-
-        internal PSFInput(long groupId, int psfOrdinal)
+        internal interface IPSFInput
         {
-            this.keyPointerMem = null;
-            this.GroupId = groupId;
-            this.PsfOrdinal = psfOrdinal;
-            this.IsDelete = false;
-            this.ReadLogicalAddress = Constants.kInvalidAddress;
-        }
+            long GroupId { get; }
 
-        internal void SetQueryKey(SectorAlignedBufferPool pool, KeyAccessor<TPSFKey> keyAccessor, ref TPSFKey key)
-        {
-            // Create a varlen CompositeKey with just one item. This is ONLY used as the query key to QueryPSF.
-            this.keyPointerMem = pool.Get(keyAccessor.KeyPointerSize);
-            ref KeyPointer<TPSFKey> keyPointer = ref Unsafe.AsRef<KeyPointer<TPSFKey>>(keyPointerMem.GetValidPointer());
-            keyPointer.Initialize(this.PsfOrdinal, ref key);
+            /// <summary>
+            /// The ordinal of the <see cref="PSF{TPSFKey, TRecordId}"/> in the group <see cref="GroupId"/>for this operation.
+            /// </summary>
+            int PsfOrdinal { get; set; }
+
+            /// <summary>
+            /// Whether this is a Delete (or the Delete part of an RCU)
+            /// </summary>
+            bool IsDelete { get; set; }
         }
 
         /// <summary>
-        /// The ID of the <see cref="PSFGroup{TProviderData, TPSFKey, TRecordId}"/> for this operation.
+        /// Input to PsfRead operations on the secondary FasterKV instance
         /// </summary>
-        public long GroupId { get; }
-
-        /// <summary>
-        /// The ordinal of the <see cref="PSF{TPSFKey, TRecordId}"/> in the group <see cref="GroupId"/>for this operation.
-        /// </summary>
-        public int PsfOrdinal { get; set; }
-
-        /// <summary>
-        /// Whether this is a Delete (or the Delete part of an RCU)
-        /// </summary>
-        public bool IsDelete { get; set; }
-
-        /// <summary>
-        /// The logical address to read in one of the PsfRead*Address methods
-        /// </summary>
-        public long ReadLogicalAddress { get; set; }
-
-        /// <summary>
-        /// The query key for a QueryPSF method
-        /// </summary>
-        public ref TPSFKey QueryKeyRef => ref Unsafe.AsRef<TPSFKey>(this.keyPointerMem.GetValidPointer());
-
-        public void Dispose()
+        internal unsafe struct PSFInput : IDisposable, IPSFInput
         {
-            if (!(this.keyPointerMem is null))
-                this.keyPointerMem.Return();
+            private SectorAlignedMemory keyPointerMem;
+
+            internal PSFInput(long groupId, int psfOrdinal)
+            {
+                this.keyPointerMem = null;
+                this.GroupId = groupId;
+                this.PsfOrdinal = psfOrdinal;
+                this.IsDelete = false;
+            }
+
+            internal void SetQueryKey(SectorAlignedBufferPool pool, KeyAccessor<TPSFKey> keyAccessor, ref TPSFKey key)
+            {
+                // Create a varlen CompositeKey with just one item. This is ONLY used as the query key to QueryPSF.
+                this.keyPointerMem = pool.Get(keyAccessor.KeyPointerSize);
+                ref KeyPointer<TPSFKey> keyPointer = ref Unsafe.AsRef<KeyPointer<TPSFKey>>(keyPointerMem.GetValidPointer());
+                keyPointer.Initialize(this.PsfOrdinal, ref key);
+            }
+
+            /// <summary>
+            /// The ID of the <see cref="PSFGroup{TProviderData, TPSFKey, TRecordId}"/> for this operation.
+            /// </summary>
+            public long GroupId { get; }
+
+            /// <summary>
+            /// The ordinal of the <see cref="PSF{TPSFKey, TRecordId}"/> in the group <see cref="GroupId"/>for this operation.
+            /// </summary>
+            public int PsfOrdinal { get; set; }
+
+            /// <summary>
+            /// Whether this is a Delete (or the Delete part of an RCU)
+            /// </summary>
+            public bool IsDelete { get; set; }
+
+            /// <summary>
+            /// The query key for a QueryPSF method
+            /// </summary>
+            public ref TPSFKey QueryKeyRef => ref Unsafe.AsRef<TPSFKey>(this.keyPointerMem.GetValidPointer());
+
+            public void Dispose()
+            {
+                if (!(this.keyPointerMem is null))
+                {
+                    this.keyPointerMem.Return();
+                    this.keyPointerMem = null;
+                }
+            }
         }
     }
 }

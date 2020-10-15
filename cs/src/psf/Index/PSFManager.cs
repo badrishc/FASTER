@@ -6,7 +6,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -53,8 +52,8 @@ namespace PSF.Index
                 this.psfSessions.Remove(session.Id);
         }
 
-        internal PSFStatus Upsert(PSFIndexSession<TProviderData, TRecordId> psfSession, TProviderData data, TRecordId recordId,
-                                  PSFChangeTracker<TProviderData, TRecordId> changeTracker)
+        internal Status Upsert(PSFIndexSession<TProviderData, TRecordId> psfSession, TProviderData data, TRecordId recordId,
+                               PSFChangeTracker<TProviderData, TRecordId> changeTracker)
         {
             // TODO: RecordId locking, to ensure consistency of multiple PSFs if the same record is updated
             // multiple times; possibly a single Array<CacheLine>[N] which is locked on TRecordId.GetHashCode % N.
@@ -71,7 +70,7 @@ namespace PSF.Index
                         // TODOerr: handle errors
                     }
                 }
-                return PSFStatus.OK;
+                return Status.OK;
             }
 
             // This Upsert was an IPU or RCU
@@ -85,7 +84,7 @@ namespace PSF.Index
                 await task;
         }
 
-        internal PSFStatus Update(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
+        internal Status Update(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
         {
             foreach (var group in this.psfGroups.Values)
             {
@@ -95,14 +94,14 @@ namespace PSF.Index
                     // TODOerr: handle errors
                 }
             }
-            return PSFStatus.OK;
+            return Status.OK;
         }
 
         internal ValueTask UpdateAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker, 
                                        CancellationToken cancellationToken) 
             => WhenAll(this.psfGroups.Values.Select(group => group.UpdateAsync(psfSession.GetGroupSession(group), changeTracker, cancellationToken)));
 
-        internal PSFStatus Delete(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
+        internal Status Delete(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker)
         {
             foreach (var group in this.psfGroups.Values)
             {
@@ -112,7 +111,7 @@ namespace PSF.Index
                     // TODOerr: handle errors
                 }
             }
-            return PSFStatus.OK;
+            return Status.OK;
         }
 
         internal bool CompletePending(PSFIndexSession<TProviderData, TRecordId> psfSession, bool spinWait = false, bool spinWaitForCommit = false)
@@ -126,16 +125,16 @@ namespace PSF.Index
                 await task;
         }
 
-        internal async ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default)
+        internal async ValueTask ReadyToCompletePendingAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, CancellationToken cancellationToken = default)
         {
-            foreach (var task in this.psfGroups.Values.Select(group => group.ReadyToCompletePendingAsync(cancellationToken))
+            foreach (var task in this.psfGroups.Values.Select(group => group.ReadyToCompletePendingAsync(psfSession.GetGroupSession(group), cancellationToken))
                                                       .Where(task => !task.IsCompletedSuccessfully))
                 await task;
         }
 
-        internal async ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default)
+        internal async ValueTask WaitForCommitAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, CancellationToken cancellationToken = default)
         {
-            foreach (var task in this.psfGroups.Values.Select(group => group.WaitForCommitAsync(cancellationToken))
+            foreach (var task in this.psfGroups.Values.Select(group => group.WaitForCommitAsync(psfSession.GetGroupSession(group), cancellationToken))
                                                       .Where(task => !task.IsCompletedSuccessfully))
                 await task;
         }
@@ -162,7 +161,7 @@ namespace PSF.Index
         /// <param name="executePSFsNow">Whether PSFs should be executed now or deferred. Should be 'true' if the provider's value type is an Object,
         ///     because the update will likely change the object's internal values, and thus a deferred 'before' execution will pick up the updated values instead.</param>
         /// <returns>A status code indicating the result of the operation</returns>
-        public PSFStatus SetBeforeData(PSFChangeTracker<TProviderData, TRecordId> changeTracker, TProviderData data, TRecordId recordId, bool executePSFsNow)
+        public Status SetBeforeData(PSFChangeTracker<TProviderData, TRecordId> changeTracker, TProviderData data, TRecordId recordId, bool executePSFsNow)
         {
             changeTracker.SetBeforeData(data, recordId);
             if (executePSFsNow)
@@ -177,7 +176,7 @@ namespace PSF.Index
                 }
                 changeTracker.HasBeforeKeys = true;
             }
-            return PSFStatus.OK;
+            return Status.OK;
         }
 
         /// <summary>
@@ -187,10 +186,10 @@ namespace PSF.Index
         /// <param name="data">The provider's data after to the update; will be passed to the PSF execution</param>
         /// <param name="recordId">The record Id to be stored for any matching PSFs</param>
         /// <returns>A status code indicating the result of the operation</returns>
-        public PSFStatus SetAfterData(PSFChangeTracker<TProviderData, TRecordId> changeTracker, TProviderData data, TRecordId recordId)
+        public Status SetAfterData(PSFChangeTracker<TProviderData, TRecordId> changeTracker, TProviderData data, TRecordId recordId)
         {
             changeTracker.SetAfterData(data, recordId);
-            return PSFStatus.OK;
+            return Status.OK;
         }
 
         private void AddGroup<TPSFKey>(PSFGroup<TProviderData, TPSFKey, TRecordId> group) where TPSFKey : struct
@@ -543,7 +542,7 @@ namespace PSF.Index
         }
 
 #if NETSTANDARD21
-        inteernal IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey1, TPSFKey2, TPSFKey3>(PSFIndexSession<TProviderData, TRecordId> psfSession, 
+        internal IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey1, TPSFKey2, TPSFKey3>(PSFIndexSession<TProviderData, TRecordId> psfSession, 
                      IPSF psf1, IEnumerable<TPSFKey1> keys1,
                      IPSF psf2, IEnumerable<TPSFKey2> keys2,
                      IPSF psf3, IEnumerable<TPSFKey3> keys3,
@@ -579,7 +578,7 @@ namespace PSF.Index
         }
 
 #if NETSTANDARD21
-        intenral IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey>(PSFIndexSession<TProviderData, TRecordId> psfSession, 
+        internal IAsyncEnumerable<TRecordId> QueryPSFAsync<TPSFKey>(PSFIndexSession<TProviderData, TRecordId> psfSession, 
                     IEnumerable<(IPSF psf, IEnumerable<TPSFKey> keys)> psfsAndKeys,
                     Func<bool[], bool> matchPredicate,
                     PSFQuerySettings querySettings = null)

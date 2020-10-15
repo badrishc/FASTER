@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 #pragma warning disable 0162
 #define CPR
 
@@ -1552,37 +1553,10 @@ namespace FASTER.core
             if (status == OperationStatus.CPR_SHIFT_DETECTED || ((asyncOp || RelaxedCPR) && status == OperationStatus.RETRY_LATER))
             {
                 #region Retry as (v+1) Operation
-                var internalStatus = default(OperationStatus);
+                OperationStatus internalStatus;
                 do
                 {
-                    switch (pendingContext.type)
-                    {
-                        case OperationType.READ:
-                            internalStatus = InternalRead(ref pendingContext.key.Get(),
-                                                          ref pendingContext.input,
-                                                          ref pendingContext.output,
-                                                          pendingContext.recordInfo.PreviousAddress,
-                                                          ref pendingContext.userContext,
-                                                          ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
-                            break;
-                        case OperationType.UPSERT:
-                            internalStatus = InternalUpsert(ref pendingContext.key.Get(),
-                                                            ref pendingContext.value.Get(),
-                                                            ref pendingContext.userContext,
-                                                            ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
-                            break;
-                        case OperationType.DELETE:
-                            internalStatus = InternalDelete(ref pendingContext.key.Get(),
-                                                            ref pendingContext.userContext,
-                                                            ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
-                            break;
-                        case OperationType.RMW:
-                            internalStatus = InternalRMW(ref pendingContext.key.Get(),
-                                                         ref pendingContext.input,
-                                                         ref pendingContext.userContext,
-                                                         ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
-                            break;
-                    }
+                    internalStatus = RetryOperation(currentCtx, ref pendingContext, fasterSession);
                     Debug.Assert(internalStatus != OperationStatus.CPR_SHIFT_DETECTED);
                 } while (internalStatus == OperationStatus.RETRY_NOW || ((asyncOp || RelaxedCPR) && internalStatus == OperationStatus.RETRY_LATER));
                 // Note that we spin in case of { async op + strict CPR } which is fine as this combination is rare/discouraged
@@ -1629,6 +1603,42 @@ namespace FASTER.core
             }
         }
 
+        internal virtual OperationStatus RetryOperation<Input, Output, Context, FasterSession>(FasterExecutionContext<Input, Output, Context> currentCtx, 
+                                                                                               ref PendingContext<Input, Output, Context> pendingContext, FasterSession fasterSession) 
+            where FasterSession : IFasterSession<Key, Value, Input, Output, Context>
+        {
+            var internalStatus = default(OperationStatus);
+            switch (pendingContext.type)
+            {
+                case OperationType.READ:
+                    internalStatus = InternalRead(ref pendingContext.key.Get(),
+                                                  ref pendingContext.input,
+                                                  ref pendingContext.output,
+                                                  pendingContext.recordInfo.PreviousAddress,
+                                                  ref pendingContext.userContext,
+                                                  ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
+                    break;
+                case OperationType.UPSERT:
+                    internalStatus = InternalUpsert(ref pendingContext.key.Get(),
+                                                    ref pendingContext.value.Get(),
+                                                    ref pendingContext.userContext,
+                                                    ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
+                    break;
+                case OperationType.DELETE:
+                    internalStatus = InternalDelete(ref pendingContext.key.Get(),
+                                                    ref pendingContext.userContext,
+                                                    ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
+                    break;
+                case OperationType.RMW:
+                    internalStatus = InternalRMW(ref pendingContext.key.Get(),
+                                                 ref pendingContext.input,
+                                                 ref pendingContext.userContext,
+                                                 ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
+                    break;
+            }
+            return internalStatus;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void SynchronizeEpoch<Input, Output, Context, FasterSession>(
             FasterExecutionContext<Input, Output, Context> opCtx, 
@@ -1668,7 +1678,7 @@ namespace FASTER.core
             HashBucket.ReleaseSharedLatch(bucket);
         }
 
-        private void HeavyEnter<Input, Output, Context, FasterSession>(long hash, FasterExecutionContext<Input, Output, Context> ctx, FasterSession session)
+        private protected void HeavyEnter<Input, Output, Context, FasterSession>(long hash, FasterExecutionContext<Input, Output, Context> ctx, FasterSession session)
             where FasterSession : IFasterSession
         {
             if (ctx.phase == Phase.PREPARE_GROW)
@@ -1686,7 +1696,7 @@ namespace FASTER.core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void BlockAllocate<Input, Output, Context, FasterSession>(
+        private protected void BlockAllocate<Input, Output, Context, FasterSession>(
             int recordSize, 
             out long logicalAddress, 
             FasterExecutionContext<Input, Output, Context> ctx, 
@@ -1716,7 +1726,7 @@ namespace FASTER.core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool TraceBackForKeyMatch(
+        protected bool TraceBackForKeyMatch(
                                     ref Key key,
                                     long fromLogicalAddress,
                                     long minOffset,
@@ -2058,7 +2068,7 @@ namespace FASTER.core
             }
         }
 
-        private long GetLatestRecordVersion(ref HashBucketEntry entry, long defaultVersion)
+        internal long GetLatestRecordVersion(ref HashBucketEntry entry, long defaultVersion)
         {
             if (UseReadCache && entry.ReadCache)
             {

@@ -19,16 +19,24 @@ namespace FASTER.core
     public abstract class FunctionsBase<Key, Value, Input, Output, Context> : IFunctions<Key, Value, Input, Output, Context>
     {
         public virtual void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress) { }
+        public virtual void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst) { }
         public virtual void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress) { }
+        public virtual void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst) { }
 
         public virtual bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) { dst = src; return true; }
+        public virtual bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst) { dst = src; return true; }
         public virtual void SingleWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) => dst = src;
+        public virtual void SingleWriter(ref Key key, ref Value src, ref Value dst) => dst = src;
 
         public virtual void InitialUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) { }
+        public virtual void InitialUpdater(ref Key key, ref Input input, ref Value value) { }
         public virtual bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue) => true;
         public virtual void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress) { }
+        public virtual void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue) { }
         public virtual bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) { return true; }
+        public virtual bool InPlaceUpdater(ref Key key, ref Input input, ref Value value) { return true; }
 
+        public virtual void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo) { }
         public virtual void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status) { }
         public virtual void RMWCompletionCallback(ref Key key, ref Input input, Context ctx, Status status) { }
         public virtual void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx) { }
@@ -51,15 +59,23 @@ namespace FASTER.core
         public SimpleFunctions(Func<Value, Value, Value> merger) => this.merger = merger;
 
         public override void ConcurrentReader(ref Key key, ref Value input, ref Value value, ref Value dst, long logicalAddress) => dst = value;
+        public override void ConcurrentReader(ref Key key, ref Value input, ref Value value, ref Value dst) => dst = value;
         public override void SingleReader(ref Key key, ref Value input, ref Value value, ref Value dst, long logicalAddress) => dst = value;
+        public override void SingleReader(ref Key key, ref Value input, ref Value value, ref Value dst) => dst = value;
 
         public override bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) { dst = src; return true; }
+        public override bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst) { dst = src; return true; }
         public override void SingleWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) => dst = src;
+        public override void SingleWriter(ref Key key, ref Value src, ref Value dst) => dst = src;
 
         public override void InitialUpdater(ref Key key, ref Value input, ref Value value, long logicalAddress) => value = input;
+        public override void InitialUpdater(ref Key key, ref Value input, ref Value value) => value = input;
         public override void CopyUpdater(ref Key key, ref Value input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress) => newValue = merger(input, oldValue);
+        public override void CopyUpdater(ref Key key, ref Value input, ref Value oldValue, ref Value newValue) => newValue = merger(input, oldValue);
         public override bool InPlaceUpdater(ref Key key, ref Value input, ref Value value, long logicalAddress) { value = merger(input, value); return true; }
+        public override bool InPlaceUpdater(ref Key key, ref Value input, ref Value value) { value = merger(input, value); return true; }
 
+        public override void ReadCompletionCallback(ref Key key, ref Value input, ref Value output, Context ctx, Status status, RecordInfo recordInfo) { }
         public override void ReadCompletionCallback(ref Key key, ref Value input, ref Value output, Context ctx, Status status) { }
         public override void RMWCompletionCallback(ref Key key, ref Value input, Context ctx, Status status) { }
         public override void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx) { }

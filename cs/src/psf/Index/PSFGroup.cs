@@ -1,11 +1,10 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-extern alias FasterCore;
-
-using FC = FasterCore::FASTER.core;
+using FASTER.core;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -25,7 +24,7 @@ namespace PSF.Index
         where TPSFKey : struct
         where TRecordId : struct, IComparable<TRecordId>
     {
-        internal FC.FasterKV<TPSFKey, TRecordId> fht;
+        internal PSFSecondaryFasterKV<TPSFKey, TRecordId> fkv;
         internal IPSFDefinition<TProviderData, TPSFKey>[] psfDefinitions;
         private readonly PSFRegistrationSettings<TPSFKey> regSettings;
 
@@ -34,8 +33,8 @@ namespace PSF.Index
         /// </summary>
         public long Id { get; }
 
-        private readonly FC.CheckpointSettings checkpointSettings;
-        private readonly int keyPointerSize = FC.Utility.GetSize(default(KeyPointer<TPSFKey>));
+        private readonly CheckpointSettings checkpointSettings;
+        private readonly int keyPointerSize = Utility.GetSize(default(KeyPointer<TPSFKey>));
         private readonly int recordIdSize = (Utility.GetSize(default(TRecordId)) + sizeof(long) - 1) & ~(sizeof(long) - 1);
 
         /// <summary>
@@ -79,26 +78,28 @@ namespace PSF.Index
             this.keyAccessor = new KeyAccessor<TPSFKey>(this.userKeyComparer, this.PSFCount, this.keyPointerSize);
 
             this.checkpointSettings = regSettings?.CheckpointSettings;
-            this.fht = new FasterKV<TPSFKey, TRecordId>(
+            this.fkv = new PSFSecondaryFasterKV<TPSFKey, TRecordId>(
                     regSettings.HashTableSize, regSettings.LogSettings, this.checkpointSettings, null /*SerializerSettings*/,
-                    new CompositeKey<TPSFKey>.UnusedKeyComparer(),
+                    keyAccessor,
                     new VariableLengthStructSettings<TPSFKey, TRecordId>
                     {
                         keyLength = new CompositeKey<TPSFKey>.VarLenLength(this.keyPointerSize, this.PSFCount)
                     }
-                )
-            { PsfKeyAccessor = keyAccessor };
+                );
 
-            this.bufferPool = this.fht.hlog.bufferPool;
+            this.bufferPool = this.fkv.hlog.bufferPool;
         }
 
         /// <inheritdoc/>
         public IDisposable NewSession()
-            => this.fht.NewSession<PSFInput<TPSFKey>, PSFOutput<TPSFKey, TRecordId>, PSFContext, PSFSecondaryFunctions<TPSFKey, TRecordId>>(
-                    new PSFSecondaryFunctions<TPSFKey, TRecordId>(), threadAffinitized: this.regSettings.ThreadAffinitized);
+            => this.fkv.NewSession<PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput, 
+                                   PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions>(
+                    new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions(this.keyAccessor, this.fkv.RecordAccessor), threadAffinitized: this.regSettings.ThreadAffinitized);
 
-        private ClientSession<TPSFKey, TRecordId, PSFInput<TPSFKey>, PSFOutput<TPSFKey, TRecordId>, PSFContext, PSFSecondaryFunctions<TPSFKey, TRecordId>> ToFkvSession(IDisposable sessionObj)
-            => sessionObj is ClientSession<TPSFKey, TRecordId, PSFInput<TPSFKey>, PSFOutput<TPSFKey, TRecordId>, PSFContext, PSFSecondaryFunctions<TPSFKey, TRecordId>> session
+        private ClientSession<TPSFKey, TRecordId, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput,
+                              PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions> ToFkvSession(IDisposable sessionObj)
+            => sessionObj is ClientSession<TPSFKey, TRecordId, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput, 
+                                           PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions> session
                 ? session
                 : throw new PSFInvalidOperationException("Expected a FASTER ClientSession");
 
@@ -164,7 +165,7 @@ namespace PSF.Index
         }
 
         /// <inheritdoc/>
-        internal unsafe Status ExecuteAndStore(IDisposable sessionObj, TProviderData providerData, TRecordId recordId, PSFExecutePhase phase,
+        public unsafe Status ExecuteAndStore(IDisposable sessionObj, TProviderData providerData, TRecordId recordId, PSFExecutePhase phase,
                                              PSFChangeTracker<TProviderData, TRecordId> changeTracker)
         {
             // Note: stackalloc is safe because PendingContext or PSFChangeTracker will copy it to the bufferPool
@@ -192,7 +193,7 @@ namespace PSF.Index
                 return Status.OK;
 
             ref CompositeKey<TPSFKey> compositeKey = ref Unsafe.AsRef<CompositeKey<TPSFKey>>(keyBytes);
-            var input = new PSFInput<TPSFKey>(this.Id, 0);
+            var input = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput(this.Id, 0);
             var value = recordId;
 
             int groupOrdinal = -1;
@@ -230,26 +231,25 @@ namespace PSF.Index
 
             var session = this.ToFkvSession(sessionObj);
             var lsn = session.ctx.serialNum + 1;
-            var context = new PSFContext { Functions = session.functions };
+            var context = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext { Functions = session.functions };
             return phase switch
             {
-                PSFExecutePhase.Insert => session.PsfInsert(ref compositeKey.CastToFirstKeyPointerRefAsKeyRef(), ref value, ref input, ref context, lsn),
-                PSFExecutePhase.PostUpdate => session.PsfUpdate(ref changeTracker.GetGroupRef(groupOrdinal),
+                PSFExecutePhase.Insert => session.PsfInsert(this.fkv, ref compositeKey.CastToFirstKeyPointerRefAsKeyRef(), ref value, ref input, ref context, lsn),
+                PSFExecutePhase.PostUpdate => session.PsfUpdate(this.fkv, ref changeTracker.GetGroupRef(groupOrdinal),
                                                                 ref value, ref input, ref context, lsn, changeTracker),
-                PSFExecutePhase.Delete => session.PsfDelete(ref compositeKey.CastToFirstKeyPointerRefAsKeyRef(), ref value, ref input, ref context, lsn,
-                                                                changeTracker),
+                PSFExecutePhase.Delete => session.PsfDelete(this.fkv, ref compositeKey.CastToFirstKeyPointerRefAsKeyRef(), ref value, ref input, ref context, lsn),
                 _ => throw new PSFInternalErrorException("Unknown PSF execution Phase {phase}")
             };
         }
 
         // Async version of ExecuteAndStore; called when we expect the operation to actually access the fkv, not just store the keys.
-        internal async ValueTask ExecuteAsync(IDisposable sessionObj, TProviderData providerData, TRecordId recordId, PSFExecutePhase phase,
-                                              PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
+        public async ValueTask ExecuteAsync(IDisposable sessionObj, TProviderData providerData, TRecordId recordId, PSFExecutePhase phase,
+                                              PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken)
         {
             var session = this.ToFkvSession(sessionObj);
             var status = this.ExecuteAndStore(sessionObj, providerData, recordId, phase, changeTracker);
             if (status == Status.PENDING)
-                await session.CompletePendingAsync(waitForCommit, cancellationToken);
+                await session.CompletePendingAsync(waitForCommit: false, cancellationToken);
         }
 
         /// <inheritdoc/>
@@ -298,12 +298,12 @@ namespace PSF.Index
         /// <summary>
         /// Update the RecordId
         /// </summary>
-        public ValueTask UpdateAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken)
+        public ValueTask UpdateAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken)
         {
             if (changeTracker.UpdateOp == UpdateOperation.Insert)
             {
                 // RMW did not find the record so did an insert. Go through Insert logic here.
-                return this.ExecuteAsync(sessionObj, changeTracker.BeforeData, changeTracker.BeforeRecordId, PSFExecutePhase.Insert, changeTracker: null, waitForCommit, cancellationToken);
+                return this.ExecuteAsync(sessionObj, changeTracker.BeforeData, changeTracker.BeforeRecordId, PSFExecutePhase.Insert, changeTracker: null, cancellationToken);
             }
 
             changeTracker.CachedBeforeLA = Constants.kInvalidAddress; // TODOcache: Find BeforeRecordId in IPUCache
@@ -325,7 +325,7 @@ namespace PSF.Index
                     // TODOerr: handle errors from GetBeforeKeys
                 }
             }
-            return this.ExecuteAsync(sessionObj, changeTracker.AfterData, default, PSFExecutePhase.PostUpdate, changeTracker, waitForCommit, cancellationToken);
+            return this.ExecuteAsync(sessionObj, changeTracker.AfterData, default, PSFExecutePhase.PostUpdate, changeTracker, cancellationToken);
         }
 
         /// <summary>
@@ -343,11 +343,11 @@ namespace PSF.Index
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe PSFInput<TPSFKey> MakeQueryInput(int psfOrdinal, ref TPSFKey key)
+        private unsafe PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput MakeQueryInput(int psfOrdinal, ref TPSFKey key)
         {
             // Putting the query key in PSFInput is necessary because iterator functions cannot contain unsafe code or have
             // byref args, and bufferPool is needed here because the stack goes away as part of the iterator operation.
-            var psfInput = new PSFInput<TPSFKey>(this.Id, psfOrdinal);
+            var psfInput = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput(this.Id, psfOrdinal);
             psfInput.SetQueryKey(this.bufferPool, this.keyAccessor, ref key);
             return psfInput;
         }
@@ -356,24 +356,28 @@ namespace PSF.Index
         public unsafe IEnumerable<TRecordId> Query(IDisposable sessionObj, int psfOrdinal, TPSFKey key, PSFQuerySettings querySettings)
             => Query(sessionObj, MakeQueryInput(psfOrdinal, ref key), querySettings);
 
-        private IEnumerable<TRecordId> Query(IDisposable sessionObj, PSFInput<TPSFKey> input, PSFQuerySettings querySettings)
+        private IEnumerable<TRecordId> Query(IDisposable sessionObj, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput input, PSFQuerySettings querySettings)
         {
             // TODOperf: if there are multiple PSFs within this group we can step through in parallel and return them
             // as a single merged stream; will require multiple TPSFKeys and their indexes in queryKeyPtr. Also consider
             // having TPSFKeys[] for a single PSF walk through in parallel, so the FHT log memory access is sequential.
-            var output = new PSFOutput<TPSFKey, TRecordId>(this.keyAccessor);
+            var output = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput();
             var session = this.ToFkvSession(sessionObj);
-            var context = new PSFContext { Functions = session.functions };
+            var context = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext { Functions = session.functions };
             var deadRecs = new DeadRecords<TRecordId>();
             try
             {
                 // Because we traverse the chain, we must wait for any pending read operations to complete.
                 // TODOperf: See if there is a better solution than spinWaiting in CompletePending.
-                Status status = session.PsfReadKey(ref input.QueryKeyRef, ref input, ref output, ref context, session.ctx.serialNum + 1);
+                Status status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, Constants.kInvalidAddress, ref context, session.ctx.serialNum);
                 if (querySettings.IsCanceled)
                     yield break;
                 if (status == Status.PENDING)
+                {
+                    // TODOperf: make a queue for sync+pending operations
                     session.CompletePending(spinWait: true);
+                    output = context.Functions.Queue.Count > 0 ? context.Functions.Queue.Dequeue() : default;
+                }
                 if (status != Status.OK)    // TODOerr: check other status
                     yield break;
 
@@ -384,15 +388,15 @@ namespace PSF.Index
 
                 do
                 {
-                    input.ReadLogicalAddress = output.PreviousLogicalAddress;
-                    status = session.PsfReadAddress(ref input, ref output, ref context, session.ctx.serialNum + 1);
+                    status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, output.PreviousLogicalAddress, ref context, session.ctx.serialNum);
                     if (status == Status.PENDING)
                         session.CompletePending(spinWait: true);
                     if (querySettings.IsCanceled)
                         yield break;
-                    if (status != Status.OK)    // TODOerr: check other status
+                    if (status != Status.OK && status != Status.NOTFOUND)    // TODOerr: check other status
                         yield break;
 
+                    Debug.Assert((status == Status.NOTFOUND) == output.Tombstone);
                     if (deadRecs.IsDead(output.RecordId, output.Tombstone))
                         continue;
 
@@ -410,22 +414,22 @@ namespace PSF.Index
         public unsafe IAsyncEnumerable<TRecordId> QueryAsync(IDisposable sessionObj, int psfOrdinal, TPSFKey key, PSFQuerySettings querySettings)
             => QueryAsync(sessionObj, MakeQueryInput(psfOrdinal, ref key), querySettings);
 
-        private async IAsyncEnumerable<TRecordId> QueryAsync(IDisposable sessionObj, PSFInput<TPSFKey> input, PSFQuerySettings querySettings)
+        private async IAsyncEnumerable<TRecordId> QueryAsync(IDisposable sessionObj, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput input, PSFQuerySettings querySettings)
         {
             // TODOperf: if there are multiple PSFs within this group we can step through in parallel and return them
             // as a single merged stream; will require multiple TPSFKeys and their indexes in queryKeyPtr. Also consider
             // having TPSFKeys[] for a single PSF walk through in parallel, so the FHT log memory access is sequential.
-            var output = new PSFOutput<TPSFKey, TRecordId>(this.keyAccessor);
+            var output = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput();
             var session = this.ToFkvSession(sessionObj);
-            var context = new PSFContext { Functions = session.functions };
+            var context = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext { Functions = session.functions };
             var deadRecs = new DeadRecords<TRecordId>();
             try
             {
                 // Because we traverse the chain, we must wait for any pending read operations to complete.
-                var readAsyncResult = await session.PsfReadKeyAsync(ref input.QueryKeyRef, ref input, ref output, ref context, session.ctx.serialNum + 1, querySettings);
+                var readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, ref output, Constants.kInvalidAddress, ref context, session.ctx.serialNum, querySettings);
                 if (querySettings.IsCanceled)
                     yield break;
-                var (status, _) = readAsyncResult.Complete();
+                var (status, _) = readAsyncResult.Complete(out var recordInfo);
                 if (status != Status.OK)    // TODOerr: check other status
                     yield break;
 
@@ -436,11 +440,10 @@ namespace PSF.Index
 
                 do
                 {
-                    input.ReadLogicalAddress = output.PreviousLogicalAddress;
-                    readAsyncResult = await session.PsfReadAddressAsync(ref input, ref output, ref context, session.ctx.serialNum + 1, querySettings);
+                    readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, ref output, recordInfo.PreviousAddress, ref context, session.ctx.serialNum, querySettings);
                     if (querySettings.IsCanceled)
                         yield break;
-                    (status, _) = readAsyncResult.Complete();
+                    (status, _) = readAsyncResult.Complete(out recordInfo);
                     if (status != Status.OK)    // TODOerr: check other status
                         yield break;
 
@@ -452,83 +455,86 @@ namespace PSF.Index
             }
             finally
             {
-                this.SecondarySessions.ReleaseSession(session);
                 input.Dispose();
             }
         }
 #endif
 
         /// <inheritdoc/>
-        public bool CompletePending(bool spinWait, bool spinWaitForCommit);     // TODO: Resolve issues with non-async operations in groups
+        public bool CompletePending(IDisposable sessionObj, bool spinWait, bool spinWaitForCommit)
+            => this.ToFkvSession(sessionObj).CompletePending(spinWait, spinWaitForCommit);                  // TODO: Resolve issues with non-async operations
 
         /// <inheritdoc/>
-        public ValueTask CompletePendingAsync(bool waitForCommit, CancellationToken token);     // TODO: Resolve issues with non-async operations in groups
+        public ValueTask CompletePendingAsync(IDisposable sessionObj, bool waitForCommit, CancellationToken cancellationToken)
+            => this.ToFkvSession(sessionObj).CompletePendingAsync(waitForCommit, cancellationToken);        // TODO: Resolve issues with non-async operations in groups
 
-        internal ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken);
+        public ValueTask ReadyToCompletePendingAsync(IDisposable sessionObj, CancellationToken cancellationToken)
+            => this.ToFkvSession(sessionObj).ReadyToCompletePendingAsync(cancellationToken);
 
-        internal ValueTask WaitForCommitAsync(CancellationToken cancellationToken);
+        public ValueTask WaitForCommitAsync(IDisposable sessionObj, CancellationToken cancellationToken)
+            => this.ToFkvSession(sessionObj).WaitForCommitAsync(cancellationToken);
 
         #region Checkpoint Operations
         /// <inheritdoc/>
-        public bool GrowIndex() => this.fht.GrowIndex();   // TODO fht ==> fkv
+        public bool GrowIndex() => this.fkv.GrowIndex();   // TODO fht ==> fkv
 
         /// <inheritdoc/>
-        public bool TakeFullCheckpoint() => this.fht.TakeFullCheckpoint(out _);
+        public bool TakeFullCheckpoint() => this.fkv.TakeFullCheckpoint(out _);
 
         /// <inheritdoc/>
-        public bool TakeFullCheckpoint(CheckpointType checkpointType) => this.fht.TakeFullCheckpoint(out _, checkpointType);
+        public bool TakeFullCheckpoint(CheckpointType checkpointType) => this.fkv.TakeFullCheckpoint(out _, checkpointType);
 
         /// <inheritdoc/>
         public async ValueTask<bool> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
-            => (await this.fht.TakeFullCheckpointAsync(checkpointType, cancellationToken)).success;
+            => (await this.fkv.TakeFullCheckpointAsync(checkpointType, cancellationToken)).success;
 
         /// <inheritdoc/>
-        public bool TakeIndexCheckpoint() => this.fht.TakeIndexCheckpoint(out _);
+        public bool TakeIndexCheckpoint() => this.fkv.TakeIndexCheckpoint(out _);
 
         /// <inheritdoc/>
         public async ValueTask<bool> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default) 
-            => (await this.fht.TakeIndexCheckpointAsync(cancellationToken)).success;
+            => (await this.fkv.TakeIndexCheckpointAsync(cancellationToken)).success;
 
         /// <inheritdoc/>
-        public bool TakeHybridLogCheckpoint() => this.fht.TakeHybridLogCheckpoint(out _);
+        public bool TakeHybridLogCheckpoint() => this.fkv.TakeHybridLogCheckpoint(out _);
 
         /// <inheritdoc/>
-        public bool TakeHybridLogCheckpoint(CheckpointType checkpointType) => this.fht.TakeHybridLogCheckpoint(out _, checkpointType);
+        public bool TakeHybridLogCheckpoint(CheckpointType checkpointType) => this.fkv.TakeHybridLogCheckpoint(out _, checkpointType);
 
         /// <inheritdoc/>
         public async ValueTask<bool> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default) 
-            => (await this.fht.TakeHybridLogCheckpointAsync(checkpointType, cancellationToken)).success;
+            => (await this.fkv.TakeHybridLogCheckpointAsync(checkpointType, cancellationToken)).success;
 
         /// <inheritdoc/>
-        public ValueTask CompleteCheckpointAsync(CancellationToken token = default) => this.fht.CompleteCheckpointAsync(token);
+        public ValueTask CompleteCheckpointAsync(CancellationToken token = default) => this.fkv.CompleteCheckpointAsync(token);
 
         /// <inheritdoc/>
-        public void Recover() => this.fht.Recover();
+        public void Recover() => this.fkv.Recover();
 
         /// <summary>
         /// Recover using full checkpoint token
         /// </summary>
         /// <param name="fullcheckpointToken"></param>
-        public void Recover(Guid fullcheckpointToken) => this.fht.Recover(fullcheckpointToken);
+        public void Recover(Guid fullcheckpointToken) => this.fkv.Recover(fullcheckpointToken);
 
         /// <summary>
         /// Recover using a separate index and log checkpoint token
         /// </summary>
         /// <param name="indexToken"></param>
         /// <param name="hybridLogToken"></param>
-        public void Recover(Guid indexToken, Guid hybridLogToken) => this.fht.Recover(indexToken, hybridLogToken);
+        public void Recover(Guid indexToken, Guid hybridLogToken) => this.fkv.Recover(indexToken, hybridLogToken);
 
 #endregion Checkpoint Operations
 
 #region Log Operations
         /// <inheritdoc/>
-        public void FlushLog(bool wait) => this.fht.Log.Flush(wait);
+        public void FlushLog(bool wait) => this.fkv.Log.Flush(wait);
 
         /// <inheritdoc/>
-        public void FlushAndEvictLog(bool wait) => this.fht.Log.FlushAndEvict(wait);
+        public void FlushAndEvictLog(bool wait) => this.fkv.Log.FlushAndEvict(wait);
 
         /// <inheritdoc/>
-        public void DisposeLogFromMemory() => this.fht.Log.DisposeFromMemory();
+        public void DisposeLogFromMemory() => this.fkv.Log.DisposeFromMemory();
 #endregion Log Operations
     }
 }

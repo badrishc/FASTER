@@ -40,7 +40,9 @@ namespace PSF.Index
 
         internal bool CancelOnEOS(IPSF psf, (int, int) location) => !(this.OnStreamEnded is null) && !this.OnStreamEnded(psf, location);
 
-        // Default is to let all streams continue to completion.
+        /// <summary>
+        /// Default query settings; let all streams continue to completion.
+        /// </summary>
         public static readonly PSFQuerySettings Default = new PSFQuerySettings { OnStreamEnded = (unusedPsf, unusedIndex) => true };
     }
 }

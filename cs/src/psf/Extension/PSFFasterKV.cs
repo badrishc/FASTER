@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-extern alias FasterCore;
-
-using FC = FasterCore::FASTER.core;
+using FASTER.core;
 using PSF.Index;
 using System;
 using System.Linq;
@@ -17,24 +15,24 @@ using System.Runtime.CompilerServices;
 namespace FASTER.PSF
 {
     // PSF-enabled wrapper FasterKV
-    public class PSFFasterKV<TKVKey, TKVValue> : FC.IFasterKV<TKVKey, TKVValue>
+    public class PSFFasterKV<TKVKey, TKVValue> : IFasterKV<TKVKey, TKVValue>
     {
-        private static readonly ConcurrentDictionary<FC.IFasterKV<TKVKey, TKVValue>, PSFFasterKV<TKVKey, TKVValue>> fkvDictionary 
-            = new ConcurrentDictionary<FC.IFasterKV<TKVKey, TKVValue>, PSFFasterKV<TKVKey, TKVValue>>();
+        private static readonly ConcurrentDictionary<IFasterKV<TKVKey, TKVValue>, PSFFasterKV<TKVKey, TKVValue>> fkvDictionary 
+            = new ConcurrentDictionary<IFasterKV<TKVKey, TKVValue>, PSFFasterKV<TKVKey, TKVValue>>();
 
-        private readonly FC.FasterKV<TKVKey, TKVValue> fkv;
+        private readonly FasterKV<TKVKey, TKVValue> fkv;
         private readonly PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager;
 
-        private PSFFasterKV(FC.FasterKV<TKVKey, TKVValue> fkv)
+        private PSFFasterKV(FasterKV<TKVKey, TKVValue> fkv)
         {
             this.fkv = fkv;
             this.psfManager = new PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long>();
         }
 
         /// <summary>
-        /// Provides a PSF wrapper for a <see cref="FC.FasterKV{Key, Value}"/> instance.
+        /// Provides a PSF wrapper for a <see cref="FasterKV{Key, Value}"/> instance.
         /// </summary>
-        public static PSFFasterKV<TKVKey, TKVValue> GetOrCreateWrapper(FC.FasterKV<TKVKey, TKVValue> fkv) 
+        public static PSFFasterKV<TKVKey, TKVValue> GetOrCreateWrapper(FasterKV<TKVKey, TKVValue> fkv) 
             => fkvDictionary.TryGetValue(fkv, out var psfKV)
                 ? psfKV
                 : fkvDictionary.GetOrAdd(fkv, new PSFFasterKV<TKVKey, TKVValue>(fkv));
@@ -69,36 +67,36 @@ namespace FASTER.PSF
 
         #region New Session Operations
 
-        public FC.ClientSession<TKVKey, TKVValue, TInput, TOutput, Context, Functions> NewSession<TInput, TOutput, Context, Functions>(Functions functions, string sessionId = null, 
-                                bool threadAffinitized = false, FC.IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
-            where Functions : FC.IFunctions<TKVKey, TKVValue, TInput, TOutput, Context>
+        public ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> NewSession<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId = null, 
+                                bool threadAffinitized = false, IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
+            where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
             => throw new PSFInvalidOperationException("Must use NewPSFSession");
 
-        public FC.ClientSession<TKVKey, TKVValue, TInput, TOutput, Context, Functions> ResumeSession<TInput, TOutput, Context, Functions>(Functions functions, string sessionId, 
-                                out FC.CommitPoint commitPoint, bool threadAffinitized = false, FC.IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
-            where Functions : FC.IFunctions<TKVKey, TKVValue, TInput, TOutput, Context>
+        public ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> ResumeSession<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId, 
+                                out CommitPoint commitPoint, bool threadAffinitized = false, IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
+            where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
             => throw new PSFInvalidOperationException("Must use ResumePSFSession");
 
-        public PSFClientSession<TKVKey, TKVValue, TInput, TOutput, Context, Functions> NewPSFSession<TInput, TOutput, Context, Functions>(Functions functions, string sessionId = null, 
-                                bool threadAffinitized = false, FC.IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
-            where Functions : FC.IFunctions<TKVKey, TKVValue, TInput, TOutput, Context>
+        public PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> NewPSFSession<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId = null, 
+                                bool threadAffinitized = false, IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
+            where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var wrapperFunctions = new WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, Context>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
-            var session = this.fkv.NewSession(wrapperFunctions, sessionId, threadAffinitized, variableLengthStruct);
+            var wrapperFunctions = new WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
+            var session = this.fkv.For(wrapperFunctions).NewSession<Functions>(sessionId, threadAffinitized, variableLengthStruct);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>();
             var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, Context, Functions>(this.Log, wrapperFunctions, session, livenessFunctions, livenessSession, this.psfManager);
+            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, wrapperFunctions, session, livenessFunctions, livenessSession, this.psfManager);
         }
 
-        public PSFClientSession<TKVKey, TKVValue, TInput, TOutput, Context, Functions> ResumePSFSession<TInput, TOutput, Context, Functions>(Functions functions, string sessionId, 
-                                out FC.CommitPoint commitPoint, bool threadAffinitized = false, FC.IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
-            where Functions : FC.IFunctions<TKVKey, TKVValue, TInput, TOutput, Context>
+        public PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> ResumePSFSession<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId, 
+                                out CommitPoint commitPoint, bool threadAffinitized = false, IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
+            where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var wrapperFunctions = new WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, Context>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
-            var session = this.fkv.ResumeSession(wrapperFunctions, sessionId, out commitPoint, threadAffinitized, variableLengthStruct);
+            var wrapperFunctions = new WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
+            var session = this.fkv.For(wrapperFunctions).ResumeSession<Functions>(sessionId, out commitPoint, threadAffinitized, variableLengthStruct);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>();
             var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, Context, Functions>(this.Log, wrapperFunctions, session, livenessFunctions, livenessSession, this.psfManager);
+            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, wrapperFunctions, session, livenessFunctions, livenessSession, this.psfManager);
         }
 
         #endregion New Session Operations
@@ -115,12 +113,12 @@ namespace FASTER.PSF
             => this.fkv.TakeFullCheckpoint(out token) && this.psfManager.TakeFullCheckpoint();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeFullCheckpoint(out Guid token, FC.CheckpointType checkpointType)
+        public bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType)
             // Do not return the PSF token here. TODO: Handle failure of PSFManager.TakeFullCheckpoint
             => this.fkv.TakeFullCheckpoint(out token, checkpointType) && this.psfManager.TakeFullCheckpoint(checkpointType);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(FC.CheckpointType checkpointType, CancellationToken cancellationToken = default)
+        public async ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
         {
             var (success, token) = await this.fkv.TakeFullCheckpointAsync(checkpointType, cancellationToken);
             // Do not return the PSF token here. TODO: Handle failure of PSFManager.TakeFullCheckpoint
@@ -146,12 +144,12 @@ namespace FASTER.PSF
             => this.fkv.TakeHybridLogCheckpoint(out token) && this.psfManager.TakeHybridLogCheckpoint();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeHybridLogCheckpoint(out Guid token, FC.CheckpointType checkpointType)
+        public bool TakeHybridLogCheckpoint(out Guid token, CheckpointType checkpointType)
             // Do not return the PSF token here. TODO: Handle failure of PSFManager.TakeHybridLogCheckpoint
             => this.fkv.TakeHybridLogCheckpoint(out token, checkpointType) && this.psfManager.TakeHybridLogCheckpoint(checkpointType);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(FC.CheckpointType checkpointType, CancellationToken cancellationToken = default)
+        public async ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
         {
             var (success, token) = await this.fkv.TakeHybridLogCheckpointAsync(checkpointType, cancellationToken);
             // Do not return the PSF token here. TODO: Handle failure of PSFManager.TakeHybridLogCheckpoint
@@ -159,24 +157,24 @@ namespace FASTER.PSF
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Recover()
+        public void Recover(int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
             // TODO: RecoverAsync with separate Tasks for primary fkv and each psfGroup
-            this.fkv.Recover();
+            this.fkv.Recover(numPagesToPreload, undoFutureVersions);
             this.psfManager.Recover();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Recover(Guid fullcheckpointToken)
+        public void Recover(Guid fullcheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            this.fkv.Recover(fullcheckpointToken);
+            this.fkv.Recover(fullcheckpointToken, numPagesToPreload, undoFutureVersions);
             this.psfManager.Recover(fullcheckpointToken);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Recover(Guid indexToken, Guid hybridLogToken)
+        public void Recover(Guid indexToken, Guid hybridLogToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            this.fkv.Recover(indexToken, hybridLogToken);
+            this.fkv.Recover(indexToken, hybridLogToken, numPagesToPreload, undoFutureVersions);
             this.psfManager.Recover(indexToken, hybridLogToken);
         }
 
@@ -197,13 +195,13 @@ namespace FASTER.PSF
 
         public long IndexSize => this.fkv.IndexSize;
 
-        public FC.IFasterEqualityComparer<TKVKey> Comparer => this.fkv.Comparer;
+        public IFasterEqualityComparer<TKVKey> Comparer => this.fkv.Comparer;
 
         public string DumpDistribution() => this.fkv.DumpDistribution();
 
-        public FC.LogAccessor<TKVKey, TKVValue> Log => this.fkv.Log;
+        public LogAccessor<TKVKey, TKVValue> Log => this.fkv.Log;
 
-        public FC.LogAccessor<TKVKey, TKVValue> ReadCache => this.fkv.ReadCache;
+        public LogAccessor<TKVKey, TKVValue> ReadCache => this.fkv.ReadCache;
 
         #endregion Other Operations
 

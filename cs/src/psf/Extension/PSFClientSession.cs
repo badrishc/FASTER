@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-extern alias FasterCore;
-
-using FC = FasterCore::FASTER.core;
+using FASTER.core;
 using PSF.Index;
 using System;
 using System.Collections.Generic;
@@ -14,28 +12,28 @@ using System.Linq;
 namespace FASTER.PSF
 {
     /// <summary>
-    /// A PSF-enabled wrapper around a <see cref="FC.ClientSession{Key, Value, Input, Output, TContext, Functions}"/>
+    /// A PSF-enabled wrapper around a <see cref="ClientSession{Key, Value, Input, Output, TContext, Functions}"/>
     /// </summary>
-    public sealed class PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> : FC.IClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions>
-        where TFunctions : FC.IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
+    public sealed class PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> : IClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions>
+        where TFunctions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
     {
-        private readonly FC.ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> fkvSession;
-        private readonly FC.LogAccessor<TKVKey, TKVValue> fkvLogAccessor;
+        private readonly ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> fkvSession;
+        private readonly LogAccessor<TKVKey, TKVValue> fkvLogAccessor;
         private readonly WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> wrapperFunctions;
 
         private readonly LivenessFunctions<TKVKey, TKVValue> fkvLivenessFunctions;
-        private readonly FC.ClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output,
-                                          LivenessFunctions<TKVKey, TKVValue>.Context, LivenessFunctions<TKVKey, TKVValue>> fkvLivenessSession;
+        private readonly ClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context,
+                                          IFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>> fkvLivenessSession;
 
         private readonly PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager;
         private readonly PSFIndexSession<FasterKVProviderData<TKVKey, TKVValue>, long> psfSession;
 
-        internal PSFClientSession(FC.LogAccessor<TKVKey, TKVValue> logAccessor,
+        internal PSFClientSession(LogAccessor<TKVKey, TKVValue> logAccessor,
                                   WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> wrapperFunctions,
-                                  FC.ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> session,
+                                  ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> session,
                                   LivenessFunctions<TKVKey, TKVValue> livenessFunctions,
-                                  FC.ClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output,
-                                                   LivenessFunctions<TKVKey, TKVValue>.Context, LivenessFunctions<TKVKey, TKVValue>> livenessSession,
+                                  ClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context,
+                                                   IFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>> livenessSession,
                                   PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager)
         {
             this.fkvSession = session;
@@ -48,7 +46,11 @@ namespace FASTER.PSF
             this.fkvLivenessSession = livenessSession;
         }
 
-        private bool IsActive => this.wrapperFunctions.IsSet;
+        private void ThrowIfActive()
+        {
+            if (this.wrapperFunctions.IsSet)
+                throw new PSFInvalidOperationException("Cannot execute concurrent actions on a session");
+        }
 
         #region PSF Queries
         internal FasterKVProviderData<TKVKey, TKVValue> CreateProviderData(long logicalAddress, LivenessFunctions<TKVKey, TKVValue>.Context context)
@@ -59,22 +61,22 @@ namespace FASTER.PSF
             try
             {
                 //  We ignore the updated previousAddress here; we're just looking for the key.
-                FC.Status status = this.fkvLivenessSession.GetKey(logicalAddress, ref input, ref context.output, context);
-                if (status == FC.Status.PENDING)
+                Status status = this.fkvLivenessSession.GetKey(logicalAddress, ref input, ref context.output, context);
+                if (status == Status.PENDING)
                     this.fkvLivenessSession.CompletePending(spinWait: true);
-                if (status != FC.Status.OK)
+                if (status != Status.OK)
                     return null;
 
                 // Now confirm liveness: Read all records in the key chain in a loop until we find logicalAddress or run out of records.
                 // Start initially by reading the key; then previousAddress will be updated on each loop iteration and will be used for the following iteration.
                 input.logAccessor = null;
-                FC.RecordInfo recordInfo = default;
-                context.output.currentAddress = FC.Constants.kInvalidAddress;
+                RecordInfo recordInfo = default;
+                context.output.currentAddress = Constants.kInvalidAddress;
  
                 while (true)
                 {
                     status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, recordInfo.PreviousAddress, out recordInfo, context);
-                    if (status == FC.Status.PENDING)
+                    if (status == Status.PENDING)
                     {
                         this.fkvLivenessSession.CompletePending(spinWait: true);
                         recordInfo = context.output.recordInfo;
@@ -82,12 +84,12 @@ namespace FASTER.PSF
                     }
 
                     // Invariant: address chains always move downward. Therefore if context.output.currentAddress < logicalAddress, logicalAddress is not live.
-                    if (status != FC.Status.OK || context.output.currentAddress < logicalAddress)
+                    if (status != Status.OK || context.output.currentAddress < logicalAddress)
                         return null;
                     
                     if (context.output.currentAddress == logicalAddress)
                     {
-                        context.output.DetachHeapContainers(out FC.IHeapContainer<TKVKey> keyContainer, out FC.IHeapContainer<TKVValue> valueContainer);
+                        context.output.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
                         return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
                     }
                 }
@@ -114,18 +116,18 @@ namespace FASTER.PSF
             try
             {
                 //  We ignore the updated previousAddress here; we're just looking for the key.
-                FC.Status status;
+                Status status;
                 var readAsyncResult = await fkvLivenessSession.GetKeyAsync(logicalAddress, ref input, default, cancellationToken: querySettings.CancellationToken);
                 if (querySettings.IsCanceled)
                     return null;
                 (status, initialOutput) = readAsyncResult.Complete();
-                if (status != FC.Status.OK)    // TODOerr: check other status
+                if (status != Status.OK)    // TODOerr: check other status
                     return null;
 
                 // Now confirm liveness: Read all records in the key chain in a loop until we find logicalAddress or run out of records.
                 // Start initially by reading the key; then previousAddress will be updated on each loop iteration and will be used for the following iteration.
                 input.logAccessor = null;
-                FC.RecordInfo recordInfo = default;
+                RecordInfo recordInfo = default;
 
                 while (true)
                 {
@@ -136,12 +138,12 @@ namespace FASTER.PSF
                     (status, output) = readAsyncResult.Complete(out recordInfo);
 
                     // Invariant: address chains always move downward. Therefore if context.output.currentAddress < logicalAddress, logicalAddress is not live.
-                    if (status != FC.Status.OK || output.currentAddress < logicalAddress)
+                    if (status != Status.OK || output.currentAddress < logicalAddress)
                         return null;
 
                     if (output.currentAddress == logicalAddress)
                     {
-                        initialOutput.DetachHeapContainers(out FC.IHeapContainer<TKVKey> keyContainer, out FC.IHeapContainer<TKVValue> valueContainer);
+                        initialOutput.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
                         return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
                     }
                 }
@@ -781,65 +783,65 @@ namespace FASTER.PSF
         public string ID => this.fkvSession.ID;
 
         /// <inheritdoc/>
-        public FC.Status Read(ref TKVKey key, ref TInput input, ref TOutput output, TContext userContext, long serialNo)
+        public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, TContext userContext, long serialNo)
             => this.fkvSession.Read(ref key, ref input, ref output, userContext, serialNo);
 
         /// <inheritdoc/>
-        public FC.Status Read(TKVKey key, TInput input, out TOutput output, TContext userContext = default, long serialNo = 0)
+        public Status Read(TKVKey key, TInput input, out TOutput output, TContext userContext = default, long serialNo = 0)
             => this.fkvSession.Read(key, input, out output, userContext, serialNo);
 
         /// <inheritdoc/>
-        public FC.Status Read(ref TKVKey key, ref TOutput output, TContext userContext = default, long serialNo = 0)
+        public Status Read(ref TKVKey key, ref TOutput output, TContext userContext = default, long serialNo = 0)
             => this.fkvSession.Read(ref key, ref output, userContext, serialNo);
 
         /// <inheritdoc/>
-        public FC.Status Read(TKVKey key, out TOutput output, TContext userContext = default, long serialNo = 0)
+        public Status Read(TKVKey key, out TOutput output, TContext userContext = default, long serialNo = 0)
             => this.fkvSession.Read(key, out output, userContext, serialNo);
 
         /// <inheritdoc/>
-        public (FC.Status, TOutput) Read(TKVKey key, TContext userContext = default, long serialNo = 0) 
+        public (Status, TOutput) Read(TKVKey key, TContext userContext = default, long serialNo = 0) 
             => this.fkvSession.Read(key, userContext, serialNo);
 
         /// <inheritdoc/>
-        public FC.Status Read(ref TKVKey key, ref TInput input, ref TOutput output, long startAddress, out FC.RecordInfo recordInfo, TContext userContext = default, long serialNo = 0)
+        public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, long startAddress, out RecordInfo recordInfo, TContext userContext = default, long serialNo = 0)
             => this.fkvSession.Read(ref key, ref input, ref output, startAddress, out recordInfo, userContext, serialNo);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken token = default)
             => this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, token);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken token = default)
             => this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, token);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(ref TKVKey key, TContext context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(ref TKVKey key, TContext context = default, long serialNo = 0, CancellationToken token = default)
             => this.fkvSession.ReadAsync(ref key, context, serialNo, token);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(TKVKey key, TContext context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(TKVKey key, TContext context = default, long serialNo = 0, CancellationToken token = default)
             => this.fkvSession.ReadAsync(ref key, context, serialNo, token);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(ref TKVKey key, ref TInput input, long startAddress, TContext userContext = default,
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ReadAsync(ref TKVKey key, ref TInput input, long startAddress, TContext userContext = default,
                                                                                                                          long serialNo = 0, CancellationToken cancellationToken = default)
             => this.fkvSession.ReadAsync(ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
 
         /// <inheritdoc/>
-        public FC.Status GetKey(long logicalAddress, ref TInput input, ref TOutput output, TContext userContext = default, long serialNo = 0)
+        public Status GetKey(long logicalAddress, ref TInput input, ref TOutput output, TContext userContext = default, long serialNo = 0)
             => this.fkvSession.GetKey(logicalAddress, ref input, ref output, userContext, serialNo);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> GetKeyAsync(long logicalAddress, ref TInput input, TContext userContext = default,
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> GetKeyAsync(long logicalAddress, ref TInput input, TContext userContext = default,
                                                                                                                         long serialNo = 0, CancellationToken cancellationToken = default) 
             => this.fkvSession.GetKeyAsync(logicalAddress, ref input, userContext, serialNo, cancellationToken);
 
         /// <inheritdoc/>
-        public FC.Status Upsert(ref TKVKey key, ref TKVValue desiredValue, TContext userContext = default, long serialNo = 0)
+        public Status Upsert(ref TKVKey key, ref TKVValue desiredValue, TContext userContext = default, long serialNo = 0)
         {
-            // TODO: throw if IsActive
+            ThrowIfActive();
             var status = this.fkvSession.Upsert(ref key, ref desiredValue, userContext, serialNo);
-            if (status == FC.Status.OK) // TODO handle pending
+            if (status == Status.OK)
             {
                 var providerData = this.wrapperFunctions.ChangeTracker is null
                                     ? new FasterKVProviderData<TKVKey, TKVValue>(this.fkvLogAccessor.GetKeyContainer(ref key),
@@ -851,10 +853,11 @@ namespace FASTER.PSF
         }
 
         /// <inheritdoc/>
-        public FC.Status RMW(ref TKVKey key, ref TInput input, TContext userContext = default, long serialNo = 0)
+        public Status RMW(ref TKVKey key, ref TInput input, TContext userContext = default, long serialNo = 0)
         {
+            ThrowIfActive();
             var status = this.fkvSession.RMW(ref key, ref input, userContext, serialNo);
-            if (status == FC.Status.OK || status == FC.Status.NOTFOUND) // TODO handle pending
+            if (status == Status.OK || status == Status.NOTFOUND)
             {
                 status = this.psfSession.Update(this.wrapperFunctions.ChangeTracker);
             }
@@ -862,13 +865,16 @@ namespace FASTER.PSF
         }
 
         /// <inheritdoc/>
-        public FC.Status RMW(TKVKey key, TInput input, TContext userContext = default, long serialNo = 0) => RMW(ref key, ref input, userContext, serialNo);
+        public Status RMW(TKVKey key, TInput input, TContext userContext = default, long serialNo = 0) => RMW(ref key, ref input, userContext, serialNo);
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> RMWAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
+        public ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> RMWAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        {
+            ThrowIfActive();
+            return this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
+        }
 
-        private async ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> CompleteRMWAsync(ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> primaryFkvValueTask,
+        private async ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> CompleteRMWAsync(ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> primaryFkvValueTask,
                                                                                                                                    CancellationToken cancellationToken)
         {
             var rmwAsyncResult = await primaryFkvValueTask;
@@ -877,7 +883,7 @@ namespace FASTER.PSF
         }
 
         /// <inheritdoc/>
-        public ValueTask<FC.FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> RMWAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        public ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext, TFunctions>> RMWAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
             => RMWAsync(ref key, ref input, context, serialNo, cancellationToken);
 
         /// <summary>
@@ -887,10 +893,11 @@ namespace FASTER.PSF
         /// <param name="userContext"></param>
         /// <param name="serialNo"></param>
         /// <returns></returns>
-        public FC.Status Delete(ref TKVKey key, TContext userContext, long serialNo)
+        public Status Delete(ref TKVKey key, TContext userContext, long serialNo)
         {
+            ThrowIfActive();
             var status = this.fkvSession.Delete(ref key, userContext, serialNo);
-            if (status == FC.Status.OK) // TODO handle pending
+            if (status == Status.OK)
             {
                 status = this.psfSession.Delete(this.wrapperFunctions.ChangeTracker);
             }
@@ -904,7 +911,7 @@ namespace FASTER.PSF
         /// <param name="userContext"></param>
         /// <param name="serialNo"></param>
         /// <returns></returns>
-        public FC.Status Delete(TKVKey key, TContext userContext, long serialNo) => this.Delete(ref key, userContext, serialNo);
+        public Status Delete(TKVKey key, TContext userContext, long serialNo) => this.Delete(ref key, userContext, serialNo);
 
         /// <summary>
         /// Get list of pending requests (for current session)
@@ -918,6 +925,13 @@ namespace FASTER.PSF
         /// </summary>
         public void Refresh() => this.fkvSession.Refresh();
 
+        private bool DetachTrackers(out List<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>> trackers)
+        {
+            trackers = this.wrapperFunctions.Queue.ToList();
+            this.wrapperFunctions.Queue.Clear();
+            return trackers.Count > 0;
+        }
+
         /// <summary>
         /// Sync complete all outstanding pending operations
         /// Async operations (ReadAsync) must be completed individually
@@ -928,8 +942,10 @@ namespace FASTER.PSF
         public bool CompletePending(bool spinWait = false, bool spinWaitForCommit = false)
         {
             // TODO parallelize fkv and psfManager CompletePending
-            return this.fkvSession.CompletePending(spinWait, spinWaitForCommit)
-                && this.psfSession.CompletePending(spinWait, spinWaitForCommit); // TODO: Resolve issues with non-async operations in groups
+            var result = this.fkvSession.CompletePending(spinWait, spinWaitForCommit);
+            if (this.DetachTrackers(out var trackers))
+                this.psfSession.ProcessTrackers(trackers);
+            return this.psfSession.CompletePending(spinWait, spinWaitForCommit) && result; // TODO: Resolve issues with non-async operations in groups
         }
 
         /// <summary>
@@ -940,10 +956,10 @@ namespace FASTER.PSF
         public async ValueTask CompletePendingAsync(bool waitForCommit = false, CancellationToken cancellationToken = default)
         {
             // Simple sequence to avoid allocating Tasks as there is no Task.WhenAll for ValueTask
-            var vt1 = this.fkvSession.CompletePendingAsync(waitForCommit, cancellationToken);
-            var vt2 = this.psfSession.CompletePendingAsync(waitForCommit, cancellationToken);    // TODO: Resolve issues with non-async operations in groups
-            await vt1;
-            await vt2;
+            await this.fkvSession.CompletePendingAsync(waitForCommit, cancellationToken);
+            if (this.DetachTrackers(out var trackers))
+                await this.psfSession.ProcessTrackersAsync(trackers);
+            await this.psfSession.CompletePendingAsync(waitForCommit, cancellationToken);    // TODO: Resolve issues with non-async operations in groups
         }
 
         /// <summary>

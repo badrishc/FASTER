@@ -12,7 +12,7 @@ namespace PSF.Index
     /// the Key typeparam of the secondary FasterKV.
     /// </summary>
     /// <typeparam name="TPSFKey">The type of the Key returned by a PSF function</typeparam>
-    internal unsafe class KeyAccessor<TPSFKey>
+    internal unsafe class KeyAccessor<TPSFKey> : IFasterEqualityComparer<TPSFKey>
     {
         private readonly IFasterEqualityComparer<TPSFKey> userComparer;
 
@@ -26,6 +26,16 @@ namespace PSF.Index
         public int KeyCount { get; }
 
         public int KeyPointerSize { get; }
+
+        #region IFasterEqualityComparer implementation
+
+        public long GetHashCode64(ref TPSFKey queryKeyPointerRefAsKeyRef) 
+            => this.GetHashCode64(ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef));
+
+        public bool Equals(ref TPSFKey queryKeyPointerRefAsKeyRef, ref TPSFKey compositeKeyPointerRefAsKeyRef)
+            => KeysEqual(ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef), ref KeyPointer<TPSFKey>.CastFromKeyRef(ref compositeKeyPointerRefAsKeyRef));
+
+        #endregion IFasterEqualityComparer implementation
 
         #region KeyPointer accessors
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

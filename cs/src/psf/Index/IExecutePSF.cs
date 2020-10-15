@@ -47,10 +47,9 @@ namespace PSF.Index
         /// <param name="phase">The phase of PSF operations in which this execution is being done</param>
         /// <param name="changeTracker">Tracks the <see cref="PSFExecutePhase.PreUpdate"/> values for comparison
         ///     to the <see cref="PSFExecutePhase.PostUpdate"/> values</param>
-        /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
         /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
-        internal ValueTask ExecuteAsync(IDisposable sessionObj, TProviderData data, TRecordId recordId, PSFExecutePhase phase,
-                               PSFChangeTracker<TProviderData, TRecordId> changeTracker, bool waitForCommit, CancellationToken cancellationToken);
+        ValueTask ExecuteAsync(IDisposable sessionObj, TProviderData data, TRecordId recordId, PSFExecutePhase phase,
+                               PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken);
 
         /// <summary>
         /// Sync complete all outstanding pending operations
@@ -59,7 +58,7 @@ namespace PSF.Index
         /// <param name="spinWait">Spin-wait for all pending operations on session to complete</param>
         /// <param name="spinWaitForCommit">Extend spin-wait until ongoing commit/checkpoint, if any, completes</param>
         /// <returns></returns>
-        internal bool CompletePending(IDisposable sessionObj, bool spinWait, bool spinWaitForCommit);
+        bool CompletePending(IDisposable sessionObj, bool spinWait, bool spinWaitForCommit);
 
         /// <summary>
         /// Complete all outstanding pending operations asynchronously
@@ -67,22 +66,24 @@ namespace PSF.Index
         /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
         /// <param name="waitForCommit">True to wait for a checkpoint after the operation</param>
         /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
-        internal ValueTask CompletePendingAsync(IDisposable sessionObj, bool waitForCommit, CancellationToken cancellationToken);
+        ValueTask CompletePendingAsync(IDisposable sessionObj, bool waitForCommit, CancellationToken cancellationToken);
 
         /// <summary>
         /// Check if at least one request is ready for CompletePending to be called on
         /// Returns completed immediately if there are no outstanding requests
         /// </summary>
-        /// <param name="cancellationToken"></param>
-        internal ValueTask ReadyToCompletePendingAsync(CancellationToken cancellationToken = default);
+        /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
+        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
+        ValueTask ReadyToCompletePendingAsync(IDisposable sessionObj, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Wait for commit of all operations completed until the current point in session.
         /// Does not itself issue checkpoint/commits.
         /// </summary>
-        /// <param name="cancellationToken"></param>
+        /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
+        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
         /// <returns></returns>
-        internal ValueTask WaitForCommitAsync(CancellationToken cancellationToken = default);
+        ValueTask WaitForCommitAsync(IDisposable sessionObj, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// The identifier of this <see cref="PSFGroup{TProviderData, TPSFKey, TRecordId}"/>.
@@ -130,12 +131,12 @@ namespace PSF.Index
         /// <summary>
         /// Initiate full (index + log) checkpoint of the FasterKV implementing the group's PSFs.
         /// </summary>
-        public bool TakeFullCheckpoint(CheckpointType checkpointType);
+        bool TakeFullCheckpoint(CheckpointType checkpointType);
 
         /// <summary>
         /// Takes a full (index + log) checkpoint of FASTER asynchronously
         /// </summary>
-        public ValueTask<bool> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
+        ValueTask<bool> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Take a checkpoint of the Index (hashtable) only
@@ -145,7 +146,7 @@ namespace PSF.Index
         /// <summary>
         /// Take a checkpoint of the Index (hashtable) only
         /// </summary>
-        public ValueTask<bool> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default);
+        ValueTask<bool> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Take a checkpoint of the hybrid log only
@@ -155,12 +156,12 @@ namespace PSF.Index
         /// <summary>
         /// Take a checkpoint of the hybrid log only
         /// </summary>
-        public bool TakeHybridLogCheckpoint(CheckpointType checkpointType);
+        bool TakeHybridLogCheckpoint(CheckpointType checkpointType);
 
         /// <summary>
         /// Initiate checkpoint of FASTER log only (not index)
         /// </summary>
-        public ValueTask<bool> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
+        ValueTask<bool> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Complete ongoing checkpoint (spin-wait)
@@ -196,12 +197,12 @@ namespace PSF.Index
         /// </summary>
         /// <param name="wait">Synchronous wait for operation to complete</param>
         /// <returns>When wait is false, this tells whether the full eviction was successfully registered with FASTER</returns>
-        public void FlushAndEvictLog(bool wait);
+        void FlushAndEvictLog(bool wait);
 
         /// <summary>
         /// Delete PSF logs entirely from memory. Cannot allocate on the log
         /// after this point. This is a synchronous operation.
         /// </summary>
-        public void DisposeLogFromMemory();
+        void DisposeLogFromMemory();
     }
 }

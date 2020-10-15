@@ -1,9 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-extern alias FasterCore;
-
-using FC = FasterCore::FASTER.core;
+using FASTER.core;
 using System;
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
@@ -22,10 +20,10 @@ namespace FASTER.PSF
     {
         // C# doesn't allow ref fields and even if it did, if the client held the FasterKVProviderData
         // past the ref lifetime, bad things would happen when accessing the ref key/value.
-        internal FC.IHeapContainer<TKVKey> keyContainer;
-        internal FC.IHeapContainer<TKVValue> valueContainer;
+        internal IHeapContainer<TKVKey> keyContainer;
+        internal IHeapContainer<TKVValue> valueContainer;
 
-        internal FasterKVProviderData(FC.IHeapContainer<TKVKey> keyContainer, FC.IHeapContainer<TKVValue> valueContainer)
+        internal FasterKVProviderData(IHeapContainer<TKVKey> keyContainer, IHeapContainer<TKVValue> valueContainer)
         {
             this.keyContainer = keyContainer;
             this.valueContainer = valueContainer;

@@ -72,7 +72,7 @@ namespace FASTER.core
         /// <param name="input"></param>
         /// <param name="oldValue"></param>
         bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue)
-#if NETSTANDARD21            
+#if NETSTANDARD21
             => true
 #endif
             ;

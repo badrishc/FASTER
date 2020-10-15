@@ -1,31 +1,31 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-extern alias FasterCore;
-
-using FC = FasterCore::FASTER.core;
+using FASTER.core;
 using PSF.Index;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System;
+using System.Collections.Generic;
 
 namespace FASTER.PSF
 {
-    internal class WrapperFunctions<TKVKey, TKVValue, Input, Output, Context> : FC.IFunctions<TKVKey, TKVValue, Input, Output, Context>
+    internal class WrapperFunctions<TKVKey, TKVValue, Input, Output, Context> : IFunctions<TKVKey, TKVValue, Input, Output, Context>
     {
         // Permanent
-        private readonly FC.IFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions;
-        private readonly FC.LogAccessor<TKVKey, TKVValue> logAccessor;
-        private readonly FC.RecordAccessor<TKVKey, TKVValue> recordAccessor;
+        private readonly IFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions;
+        private readonly LogAccessor<TKVKey, TKVValue> logAccessor;
+        private readonly RecordAccessor<TKVKey, TKVValue> recordAccessor;
         private readonly PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager;
 
         // Ephemeral
         internal PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long> ChangeTracker;
         internal long LogicalAddress;
+        internal Queue<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>> Queue = new Queue<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>>();
 
-        internal WrapperFunctions(FC.IFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions,
-                                  FC.LogAccessor<TKVKey, TKVValue> logAccessor,
-                                  FC.RecordAccessor<TKVKey, TKVValue> recAcc,
+        internal WrapperFunctions(IFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions,
+                                  LogAccessor<TKVKey, TKVValue> logAccessor,
+                                  RecordAccessor<TKVKey, TKVValue> recAcc,
                                   PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfMgr)
         {
             this.userFunctions = userFunctions;
@@ -37,10 +37,10 @@ namespace FASTER.PSF
         internal void Clear()
         {
             this.ChangeTracker = null;
-            this.LogicalAddress = FC.Constants.kInvalidAddress;
+            this.LogicalAddress = Constants.kInvalidAddress;
         }
 
-        internal bool IsSet => !(this.ChangeTracker is null) || this.LogicalAddress != FC.Constants.kInvalidAddress;
+        internal bool IsSet => !(this.ChangeTracker is null) || this.LogicalAddress != Constants.kInvalidAddress;
 
         #region IFunctions implementations
         public void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
@@ -75,7 +75,7 @@ namespace FASTER.PSF
             }
 
             // Because we do not have the old logicalAddress, we cannot RCU; instead we must simply insert a new record, using the fast path.
-            //if (oldAddress != FC.Constants.kInvalidAddress) SetRCU(ref key, oldAddress, newAddress);
+            //if (oldAddress != Constants.kInvalidAddress) SetRCU(ref key, oldAddress, newAddress);
             this.LogicalAddress = logicalAddress;
         }
 
@@ -127,15 +127,37 @@ namespace FASTER.PSF
             return false;
         }
 
-        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, FC.Status status, FC.RecordInfo recordInfo)
+        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
             => this.userFunctions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
-        public void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, FC.Status status)
-            => this.userFunctions.RMWCompletionCallback(ref key, ref input, ctx, status);
+
+        private void EnqueueTracker()
+        {
+            if (!(this.ChangeTracker is null))
+            {
+                this.Queue.Enqueue(this.ChangeTracker);
+                this.ChangeTracker = null;
+            }
+        }
+
+        public void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, Status status)
+        {
+            this.EnqueueTracker();
+            this.userFunctions.RMWCompletionCallback(ref key, ref input, ctx, status);
+        }
+
         public void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx)
-            => this.userFunctions.UpsertCompletionCallback(ref key, ref value, ctx);
+        {
+            this.EnqueueTracker();
+            this.userFunctions.UpsertCompletionCallback(ref key, ref value, ctx);
+        }
+
         public void DeleteCompletionCallback(ref TKVKey key, Context ctx)
-            => this.userFunctions.DeleteCompletionCallback(ref key, ctx);
-        public void CheckpointCompletionCallback(string sessionId, FC.CommitPoint commitPoint)
+        {
+            this.EnqueueTracker();
+            this.userFunctions.DeleteCompletionCallback(ref key, ctx);
+        }
+
+        public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint)
             => CheckpointCompletionCallback(sessionId, commitPoint);
 
         #endregion IFunctions implementations

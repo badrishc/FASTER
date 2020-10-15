@@ -19,11 +19,6 @@ namespace FASTER.core
         UPSERT,
         INSERT,
         DELETE
-#if PSF_DLL
-        , PSF_READ_KEY
-        , PSF_READ_ADDRESS
-        , PSF_INSERT
-#endif
     }
 
     internal enum OperationStatus
