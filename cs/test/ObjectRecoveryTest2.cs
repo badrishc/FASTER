@@ -244,10 +244,10 @@ namespace FASTER.test.recovery.objects
 
     public class MyFunctions : IFunctions<MyKey, MyValue, MyInput, MyOutput, MyContext>
     {
-        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyValue value) => value.value = input.value;
+        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyValue value, long logAddress) => value.value = input.value;
         public bool NeedCopyUpdate(ref MyKey key, ref MyInput input, ref MyValue oldValue) => true;
-        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue) => newValue = oldValue;
-        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyValue value)
+        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue, long oldLogAddress, long newLogAddress) => newValue = oldValue;
+        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyValue value, long logAddress)
         {
             if (value.value.Length < input.value.Length)
                 return false;
@@ -256,10 +256,10 @@ namespace FASTER.test.recovery.objects
         }
 
 
-        public void SingleReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst) => dst.value = value;
-        public void SingleWriter(ref MyKey key, ref MyValue src, ref MyValue dst) => dst = src;
-        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst) => dst.value = value;
-        public bool ConcurrentWriter(ref MyKey key, ref MyValue src, ref MyValue dst)
+        public void SingleReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress) => dst.value = value;
+        public void SingleWriter(ref MyKey key, ref MyValue src, ref MyValue dst, long logAddress) => dst = src;
+        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress) => dst.value = value;
+        public bool ConcurrentWriter(ref MyKey key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             if (src == null)
                 return false;
@@ -271,7 +271,7 @@ namespace FASTER.test.recovery.objects
             return true;
         }
 
-        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyOutput output, MyContext ctx, Status status) => ctx.Populate(ref status, ref output);
+        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyOutput output, MyContext ctx, Status status, RecordInfo recordInfo) => ctx.Populate(ref status, ref output);
         public void UpsertCompletionCallback(ref MyKey key, ref MyValue value, MyContext ctx) { }
         public void RMWCompletionCallback(ref MyKey key, ref MyInput input, MyContext ctx, Status status) { }
         public void DeleteCompletionCallback(ref MyKey key, MyContext ctx) { }

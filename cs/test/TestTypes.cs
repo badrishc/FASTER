@@ -59,7 +59,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref KeyStruct key, ref InputStruct input, ref OutputStruct output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref KeyStruct key, ref InputStruct input, ref OutputStruct output, Empty ctx, Status status, RecordInfo recordInfo)
         {
             Assert.IsTrue(status == Status.OK);
             Assert.IsTrue(output.value.vfield1 == key.kfield1);
@@ -80,36 +80,36 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst)
+        public void SingleReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public void ConcurrentReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst)
+        public void ConcurrentReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst, long logAddress)
         {
             dst.value = value;
         }
 
         // Upsert functions
-        public void SingleWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst)
+        public void SingleWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst, long logAddress)
         {
             dst = src;
         }
 
-        public bool ConcurrentWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst)
+        public bool ConcurrentWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst, long logAddress)
         {
             dst = src;
             return true;
         }
 
         // RMW functions
-        public void InitialUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value)
+        public void InitialUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, long logAddress)
         {
             value.vfield1 = input.ifield1;
             value.vfield2 = input.ifield2;
         }
 
-        public bool InPlaceUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value)
+        public bool InPlaceUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, long logAddress)
         {
             value.vfield1 += input.ifield1;
             value.vfield2 += input.ifield2;
@@ -118,7 +118,7 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue) => true;
 
-        public void CopyUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue, ref ValueStruct newValue)
+        public void CopyUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue, ref ValueStruct newValue, long oldLogAddress, long newLogAddress)
         {
             newValue.vfield1 = oldValue.vfield1 + input.ifield1;
             newValue.vfield2 = oldValue.vfield2 + input.ifield2;
@@ -132,7 +132,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref KeyStruct key, ref InputStruct input, ref OutputStruct output, int ctx, Status status)
+        public void ReadCompletionCallback(ref KeyStruct key, ref InputStruct input, ref OutputStruct output, int ctx, Status status, RecordInfo recordInfo)
         {
             if (ctx == 0)
             {
@@ -160,36 +160,36 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst)
+        public void SingleReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public void ConcurrentReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst)
+        public void ConcurrentReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst, long logAddress)
         {
             dst.value = value;
         }
 
         // Upsert functions
-        public void SingleWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst)
+        public void SingleWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst, long logAddress)
         {
             dst = src;
         }
 
-        public bool ConcurrentWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst)
+        public bool ConcurrentWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst, long logAddress)
         {
             dst = src;
             return true;
         }
 
         // RMW functions
-        public void InitialUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value)
+        public void InitialUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, long logAddress)
         {
             value.vfield1 = input.ifield1;
             value.vfield2 = input.ifield2;
         }
 
-        public bool InPlaceUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value)
+        public bool InPlaceUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, long logAddress)
         {
             value.vfield1 += input.ifield1;
             value.vfield2 += input.ifield2;
@@ -198,7 +198,7 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue) => true;
 
-        public void CopyUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue, ref ValueStruct newValue)
+        public void CopyUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue, ref ValueStruct newValue, long oldLogAddress, long newLogAddress)
         {
             newValue.vfield1 = oldValue.vfield1 + input.ifield1;
             newValue.vfield2 = oldValue.vfield2 + input.ifield2;
@@ -218,7 +218,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref KeyStruct key, ref InputStruct input, ref OutputStruct output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref KeyStruct key, ref InputStruct input, ref OutputStruct output, Empty ctx, Status status, RecordInfo recordInfo)
         {
             Assert.IsTrue(status == Status.OK);
             Assert.IsTrue(output.value.vfield1 == key.kfield1);
@@ -239,36 +239,36 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst)
+        public void SingleReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public void ConcurrentReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst)
+        public void ConcurrentReader(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, ref OutputStruct dst, long logAddress)
         {
             dst.value = value;
         }
 
         // Upsert functions
-        public void SingleWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst)
+        public void SingleWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst, long logAddress)
         {
             dst = src;
         }
 
-        public bool ConcurrentWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst)
+        public bool ConcurrentWriter(ref KeyStruct key, ref ValueStruct src, ref ValueStruct dst, long logAddress)
         {
             Interlocked.Increment(ref _concurrentWriterCallCount);
             return false;
         }
 
         // RMW functions
-        public void InitialUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value)
+        public void InitialUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, long logAddress)
         {
             value.vfield1 = input.ifield1;
             value.vfield2 = input.ifield2;
         }
 
-        public bool InPlaceUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value)
+        public bool InPlaceUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct value, long logAddress)
         {
             Interlocked.Increment(ref _inPlaceUpdaterCallCount);
             return false;
@@ -276,7 +276,7 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue) => true;
 
-        public void CopyUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue, ref ValueStruct newValue)
+        public void CopyUpdater(ref KeyStruct key, ref InputStruct input, ref ValueStruct oldValue, ref ValueStruct newValue, long oldLogAddress, long newLogAddress)
         {
             newValue.vfield1 = oldValue.vfield1 + input.ifield1;
             newValue.vfield2 = oldValue.vfield2 + input.ifield2;

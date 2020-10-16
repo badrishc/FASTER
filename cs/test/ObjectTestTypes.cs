@@ -77,12 +77,12 @@ namespace FASTER.test
 
     public class MyFunctions : IFunctions<MyKey, MyValue, MyInput, MyOutput, Empty>
     {
-        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyValue value)
+        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyValue value, long logAddress)
         {
             value = new MyValue { value = input.value };
         }
 
-        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyValue value)
+        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyValue value, long logAddress)
         {
             value.value += input.value;
             return true;
@@ -90,12 +90,12 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref MyKey key, ref MyInput input, ref MyValue oldValue) => true;
 
-        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue)
+        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue, long oldLogAddress, long newLogAddress)
         {
             newValue = new MyValue { value = oldValue.value + input.value };
         }
 
-        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst)
+        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress)
         {
             if (dst == default)
                 dst = new MyOutput();
@@ -103,7 +103,7 @@ namespace FASTER.test
             dst.value = value;
         }
 
-        public bool ConcurrentWriter(ref MyKey key, ref MyValue src, ref MyValue dst)
+        public bool ConcurrentWriter(ref MyKey key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             dst.value = src.value;
             return true;
@@ -113,7 +113,7 @@ namespace FASTER.test
         {
         }
 
-        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyOutput output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyOutput output, Empty ctx, Status status, RecordInfo recordInfo)
         {
             Assert.IsTrue(status == Status.OK);
             Assert.IsTrue(key.key == output.value.value);
@@ -132,14 +132,14 @@ namespace FASTER.test
         {
         }
 
-        public void SingleReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst)
+        public void SingleReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress)
         {
             if (dst == default)
                 dst = new MyOutput();
             dst.value = value;
         }
 
-        public void SingleWriter(ref MyKey key, ref MyValue src, ref MyValue dst)
+        public void SingleWriter(ref MyKey key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             dst = src;
         }
@@ -147,12 +147,12 @@ namespace FASTER.test
 
     public class MyFunctionsDelete : IFunctions<MyKey, MyValue, MyInput, MyOutput, int>
     {
-        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyValue value)
+        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyValue value, long logAddress)
         {
             value = new MyValue { value = input.value };
         }
 
-        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyValue value)
+        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyValue value, long logAddress)
         {
             value.value += input.value;
             return true;
@@ -160,12 +160,12 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref MyKey key, ref MyInput input, ref MyValue oldValue) => true;
 
-        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue)
+        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue, long oldLogAddress, long newLogAddress)
         {
             newValue = new MyValue { value = oldValue.value + input.value };
         }
 
-        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst)
+        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress)
         {
             if (dst == null)
                 dst = new MyOutput();
@@ -173,7 +173,7 @@ namespace FASTER.test
             dst.value = value;
         }
 
-        public bool ConcurrentWriter(ref MyKey key, ref MyValue src, ref MyValue dst)
+        public bool ConcurrentWriter(ref MyKey key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             dst = src;
             return true;
@@ -183,7 +183,7 @@ namespace FASTER.test
         {
         }
 
-        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyOutput output, int ctx, Status status)
+        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyOutput output, int ctx, Status status, RecordInfo recordInfo)
         {
             if (ctx == 0)
             {
@@ -212,7 +212,7 @@ namespace FASTER.test
         {
         }
 
-        public void SingleReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst)
+        public void SingleReader(ref MyKey key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress)
         {
             if (dst == null)
                 dst = new MyOutput();
@@ -220,7 +220,7 @@ namespace FASTER.test
             dst.value = value;
         }
 
-        public void SingleWriter(ref MyKey key, ref MyValue src, ref MyValue dst)
+        public void SingleWriter(ref MyKey key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             dst = src;
         }
@@ -228,12 +228,12 @@ namespace FASTER.test
 
     public class MixedFunctions : IFunctions<int, MyValue, MyInput, MyOutput, Empty>
     {
-        public void InitialUpdater(ref int key, ref MyInput input, ref MyValue value)
+        public void InitialUpdater(ref int key, ref MyInput input, ref MyValue value, long logAddress)
         {
             value = new MyValue { value = input.value };
         }
 
-        public bool InPlaceUpdater(ref int key, ref MyInput input, ref MyValue value)
+        public bool InPlaceUpdater(ref int key, ref MyInput input, ref MyValue value, long logAddress)
         {
             value.value += input.value;
             return true;
@@ -241,17 +241,17 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref int key, ref MyInput input, ref MyValue oldValue) => true;
 
-        public void CopyUpdater(ref int key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue)
+        public void CopyUpdater(ref int key, ref MyInput input, ref MyValue oldValue, ref MyValue newValue, long oldLogAddress, long newLogAddress)
         {
             newValue = new MyValue { value = oldValue.value + input.value };
         }
 
-        public void ConcurrentReader(ref int key, ref MyInput input, ref MyValue value, ref MyOutput dst)
+        public void ConcurrentReader(ref int key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public bool ConcurrentWriter(ref int key, ref MyValue src, ref MyValue dst)
+        public bool ConcurrentWriter(ref int key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             dst.value = src.value;
             return true;
@@ -261,7 +261,7 @@ namespace FASTER.test
         {
         }
 
-        public void ReadCompletionCallback(ref int key, ref MyInput input, ref MyOutput output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref int key, ref MyInput input, ref MyOutput output, Empty ctx, Status status, RecordInfo recordInfo)
         {
         }
 
@@ -277,12 +277,12 @@ namespace FASTER.test
         {
         }
 
-        public void SingleReader(ref int key, ref MyInput input, ref MyValue value, ref MyOutput dst)
+        public void SingleReader(ref int key, ref MyInput input, ref MyValue value, ref MyOutput dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public void SingleWriter(ref int key, ref MyValue src, ref MyValue dst)
+        public void SingleWriter(ref int key, ref MyValue src, ref MyValue dst, long logAddress)
         {
             dst = src;
         }
@@ -334,7 +334,7 @@ namespace FASTER.test
         {
         }
 
-        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyLargeOutput output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref MyKey key, ref MyInput input, ref MyLargeOutput output, Empty ctx, Status status, RecordInfo recordInfo)
         {
             Assert.IsTrue(status == Status.OK);
             for (int i = 0; i < output.value.value.Length; i++)
@@ -354,30 +354,30 @@ namespace FASTER.test
 
         public bool NeedCopyUpdate(ref MyKey key, ref MyInput input, ref MyLargeValue oldValue) => true;
 
-        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyLargeValue oldValue, ref MyLargeValue newValue)
+        public void CopyUpdater(ref MyKey key, ref MyInput input, ref MyLargeValue oldValue, ref MyLargeValue newValue, long oldLogAddress, long newLogAddress)
         {
         }
 
-        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyLargeValue value)
+        public void InitialUpdater(ref MyKey key, ref MyInput input, ref MyLargeValue value, long logAddress)
         {
         }
 
-        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyLargeValue value)
+        public bool InPlaceUpdater(ref MyKey key, ref MyInput input, ref MyLargeValue value, long logAddress)
         {
             return true;
         }
 
-        public void SingleReader(ref MyKey key, ref MyInput input, ref MyLargeValue value, ref MyLargeOutput dst)
+        public void SingleReader(ref MyKey key, ref MyInput input, ref MyLargeValue value, ref MyLargeOutput dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyLargeValue value, ref MyLargeOutput dst)
+        public void ConcurrentReader(ref MyKey key, ref MyInput input, ref MyLargeValue value, ref MyLargeOutput dst, long logAddress)
         {
             dst.value = value;
         }
 
-        public bool ConcurrentWriter(ref MyKey key, ref MyLargeValue src, ref MyLargeValue dst)
+        public bool ConcurrentWriter(ref MyKey key, ref MyLargeValue src, ref MyLargeValue dst, long logAddress)
         {
             dst = src;
             return true;
@@ -387,7 +387,7 @@ namespace FASTER.test
         {
         }
 
-        public void SingleWriter(ref MyKey key, ref MyLargeValue src, ref MyLargeValue dst)
+        public void SingleWriter(ref MyKey key, ref MyLargeValue src, ref MyLargeValue dst, long logAddress)
         {
             dst = src;
         }

@@ -107,7 +107,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref Key key, ref Input input, ref int[] output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref Key key, ref Input input, ref int[] output, Empty ctx, Status status, RecordInfo recordInfo)
         {
             Assert.IsTrue(status == Status.OK);
             for (int i = 0; i < output.Length; i++)
@@ -130,23 +130,23 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst)
+        public void SingleReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
         {
             value.ToIntArray(ref dst);
         }
 
-        public void ConcurrentReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst)
+        public void ConcurrentReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
         {
             value.ToIntArray(ref dst);
         }
 
         // Upsert functions
-        public void SingleWriter(ref Key key, ref VLValue src, ref VLValue dst)
+        public void SingleWriter(ref Key key, ref VLValue src, ref VLValue dst, long logAddress)
         {
             src.CopyTo(ref dst);
         }
 
-        public bool ConcurrentWriter(ref Key key, ref VLValue src, ref VLValue dst)
+        public bool ConcurrentWriter(ref Key key, ref VLValue src, ref VLValue dst, long logAddress)
         {
             if (src.length != dst.length)
                 return false;
@@ -156,18 +156,18 @@ namespace FASTER.test
         }
 
         // RMW functions
-        public void InitialUpdater(ref Key key, ref Input input, ref VLValue value)
+        public void InitialUpdater(ref Key key, ref Input input, ref VLValue value, long logAddress)
         {
         }
 
-        public bool InPlaceUpdater(ref Key key, ref Input input, ref VLValue value)
+        public bool InPlaceUpdater(ref Key key, ref Input input, ref VLValue value, long logAddress)
         {
             return true;
         }
 
         public bool NeedCopyUpdate(ref Key key, ref Input input, ref VLValue oldValue) => true;
 
-        public void CopyUpdater(ref Key key, ref Input input, ref VLValue oldValue, ref VLValue newValue)
+        public void CopyUpdater(ref Key key, ref Input input, ref VLValue oldValue, ref VLValue newValue, long oldLogAddress, long newLogAddress)
         {
         }
     }
@@ -179,7 +179,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref VLValue key, ref Input input, ref int[] output, Empty ctx, Status status)
+        public void ReadCompletionCallback(ref VLValue key, ref Input input, ref int[] output, Empty ctx, Status status, RecordInfo recordInfo)
         {
             Assert.IsTrue(status == Status.OK);
             for (int i = 0; i < output.Length; i++)
@@ -202,23 +202,23 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst)
+        public void SingleReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
         {
             value.ToIntArray(ref dst);
         }
 
-        public void ConcurrentReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst)
+        public void ConcurrentReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
         {
             value.ToIntArray(ref dst);
         }
 
         // Upsert functions
-        public void SingleWriter(ref VLValue key, ref VLValue src, ref VLValue dst)
+        public void SingleWriter(ref VLValue key, ref VLValue src, ref VLValue dst, long logAddress)
         {
             src.CopyTo(ref dst);
         }
 
-        public bool ConcurrentWriter(ref VLValue key, ref VLValue src, ref VLValue dst)
+        public bool ConcurrentWriter(ref VLValue key, ref VLValue src, ref VLValue dst, long logAddress)
         {
             if (src.length != dst.length)
                 return false;
@@ -228,18 +228,18 @@ namespace FASTER.test
         }
 
         // RMW functions
-        public void InitialUpdater(ref VLValue key, ref Input input, ref VLValue value)
+        public void InitialUpdater(ref VLValue key, ref Input input, ref VLValue value, long logAddress)
         {
         }
 
-        public bool InPlaceUpdater(ref VLValue key, ref Input input, ref VLValue value)
+        public bool InPlaceUpdater(ref VLValue key, ref Input input, ref VLValue value, long logAddress)
         {
             return true;
         }
 
         public bool NeedCopyUpdate(ref VLValue key, ref Input input, ref VLValue oldValue) => true;
 
-        public void CopyUpdater(ref VLValue key, ref Input input, ref VLValue oldValue, ref VLValue newValue)
+        public void CopyUpdater(ref VLValue key, ref Input input, ref VLValue oldValue, ref VLValue newValue, long oldLogAddress, long newLogAddress)
         {
         }
     }
