@@ -11,12 +11,6 @@ namespace PSF.Index
 {
     internal unsafe partial class PSFSecondaryFasterKV<TPSFKey, TRecordId> : FasterKV<TPSFKey, TRecordId>
     {
-        internal interface IInputAccessor<TInput>
-        {
-            bool IsDelete(ref TInput input);
-            bool SetDelete(ref TInput input, bool value);
-        }
-
         internal class PSFFunctions : IFunctions<TPSFKey, TRecordId, PSFInput, PSFOutput, PSFContext>, IInputAccessor<PSFInput>
         {
             readonly KeyAccessor<TPSFKey> keyAccessor;
@@ -37,6 +31,8 @@ namespace PSF.Index
             }
 
             #region IInputAccessor
+
+            public long GroupId { get; }
 
             public bool IsDelete(ref PSFInput input) => input.IsDelete;
             public bool SetDelete(ref PSFInput input, bool value) => input.IsDelete = value;

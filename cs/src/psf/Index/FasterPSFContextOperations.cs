@@ -34,35 +34,6 @@ namespace PSF.Index
             return status;
         }
 
-        internal override OperationStatus RetryOperation<Input, Output, Context, FasterSession>(FasterExecutionContext<Input, Output, Context> currentCtx,
-                                                                        ref PendingContext<Input, Output, Context> pendingContext, FasterSession fasterSession)
-        {
-            OperationStatus internalStatus;
-            switch (pendingContext.type)
-            {
-                case OperationType.READ:
-                    internalStatus = this.PsfInternalRead(ref pendingContext.key.Get(),
-                                         ref pendingContext.input,
-                                         ref pendingContext.output,
-                                         pendingContext.recordInfo.PreviousAddress,
-                                         ref pendingContext.userContext,
-                                         ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
-                    break;
-                case OperationType.INSERT:
-                    internalStatus = this.PsfInternalInsert(ref pendingContext.key.Get(),
-                                         ref pendingContext.value.Get(),
-                                         ref pendingContext.input,
-                                         ref pendingContext.userContext,
-                                         ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
-                    Debug.Assert(internalStatus != OperationStatus.RETRY_LATER, "PSF insertion should not go pending");
-                    break;
-                default:
-                    throw new PSFInternalErrorException($"PSF implementation should not be retrying operation {pendingContext.type}");
-            };
-
-            return internalStatus;
-        }
-
         internal ValueTask<ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ContextPsfReadAsync<TInput, TOutput, TContext, TFunctions>(
                                         ClientSession<TPSFKey, TRecordId, TInput, TOutput, TContext, TFunctions> clientSession,
                                         ref TPSFKey key, ref TInput input, long startAddress, ref TContext context, long serialNo, PSFQuerySettings querySettings)
@@ -143,6 +114,7 @@ namespace PSF.Index
                 value = changeTracker.AfterRecordId;
                 return PsfRcuInsert(groupKeysPair.After, ref value, ref input, ref context, ref pcontext, fasterSession, sessionCtx, serialNo + 1);
             }
+
             return status;
         }
 
@@ -154,9 +126,11 @@ namespace PSF.Index
             (context as IInputAccessor<Input>).SetDelete(ref input, false);
             var internalStatus = this.PsfInternalInsert(ref groupKeys.CastToKeyRef<TPSFKey>(), ref value, ref input, ref context,
                                                         ref pcontext, fasterSession, sessionCtx, serialNo);
-            return internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND
+            Status status = internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND
                 ? (Status)internalStatus
                 : HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, asyncOp: false, out _);
+            sessionCtx.serialNum = serialNo;
+            return status;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

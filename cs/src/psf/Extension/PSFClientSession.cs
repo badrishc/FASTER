@@ -944,7 +944,7 @@ namespace FASTER.PSF
             // TODO parallelize fkv and psfManager CompletePending
             var result = this.fkvSession.CompletePending(spinWait, spinWaitForCommit);
             if (this.DetachTrackers(out var trackers))
-                this.psfSession.ProcessTrackers(trackers);
+                this.psfSession.ProcessChanges(trackers);
             return this.psfSession.CompletePending(spinWait, spinWaitForCommit) && result; // TODO: Resolve issues with non-async operations in groups
         }
 
@@ -958,7 +958,7 @@ namespace FASTER.PSF
             // Simple sequence to avoid allocating Tasks as there is no Task.WhenAll for ValueTask
             await this.fkvSession.CompletePendingAsync(waitForCommit, cancellationToken);
             if (this.DetachTrackers(out var trackers))
-                await this.psfSession.ProcessTrackersAsync(trackers);
+                await this.psfSession.ProcessChangesAsync(trackers);
             await this.psfSession.CompletePendingAsync(waitForCommit, cancellationToken);    // TODO: Resolve issues with non-async operations in groups
         }
 

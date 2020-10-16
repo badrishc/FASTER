@@ -71,6 +71,31 @@ namespace PSF.Index
         public Status Delete(PSFChangeTracker<TProviderData, TRecordId> changeTracker)
             => this.psfManager.Delete(this, changeTracker);
 
+        /// <summary>
+        /// Process a set of changes
+        /// </summary>
+        /// <param name="trackers">The set of changes to process</param>
+        public void ProcessChanges(IEnumerable<PSFChangeTracker<TProviderData, TRecordId>> trackers)
+        {
+            foreach (var tracker in trackers)
+            {
+                // TODO: call Update based on tracker.UpdateOp and whether it was a delete
+            }
+        }
+
+        /// <summary>
+        /// Process a set of changes
+        /// </summary>
+        /// <param name="trackers">The set of changes to process</param>
+        public ValueTask ProcessChangesAsync(IEnumerable<PSFChangeTracker<TProviderData, TRecordId>> trackers)
+        {
+            foreach (var tracker in trackers)
+            {
+                // TODO: call UpdateAsync based on tracker.UpdateOp and whether it was a delete
+            }
+            return new ValueTask();
+        }
+
         #endregion PSF Updates
 
         #region Complete pending operations

@@ -1556,7 +1556,7 @@ namespace FASTER.core
                 OperationStatus internalStatus;
                 do
                 {
-                    internalStatus = RetryOperation(currentCtx, ref pendingContext, fasterSession);
+                    internalStatus = RetryOperationStatus(currentCtx, ref pendingContext, fasterSession);
                     Debug.Assert(internalStatus != OperationStatus.CPR_SHIFT_DETECTED);
                 } while (internalStatus == OperationStatus.RETRY_NOW || ((asyncOp || RelaxedCPR) && internalStatus == OperationStatus.RETRY_LATER));
                 // Note that we spin in case of { async op + strict CPR } which is fine as this combination is rare/discouraged
@@ -1603,7 +1603,7 @@ namespace FASTER.core
             }
         }
 
-        internal virtual OperationStatus RetryOperation<Input, Output, Context, FasterSession>(FasterExecutionContext<Input, Output, Context> currentCtx, 
+        internal virtual OperationStatus RetryOperationStatus<Input, Output, Context, FasterSession>(FasterExecutionContext<Input, Output, Context> currentCtx, 
                                                                                                ref PendingContext<Input, Output, Context> pendingContext, FasterSession fasterSession) 
             where FasterSession : IFasterSession<Key, Value, Input, Output, Context>
         {

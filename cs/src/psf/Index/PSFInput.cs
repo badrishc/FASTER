@@ -11,25 +11,18 @@ namespace PSF.Index
 {
     internal unsafe partial class PSFSecondaryFasterKV<TPSFKey, TRecordId> : FasterKV<TPSFKey, TRecordId>
     {
-        internal interface IPSFInput
+        internal interface IInputAccessor<TInput>
         {
             long GroupId { get; }
 
-            /// <summary>
-            /// The ordinal of the <see cref="PSF{TPSFKey, TRecordId}"/> in the group <see cref="GroupId"/>for this operation.
-            /// </summary>
-            int PsfOrdinal { get; set; }
-
-            /// <summary>
-            /// Whether this is a Delete (or the Delete part of an RCU)
-            /// </summary>
-            bool IsDelete { get; set; }
+            bool IsDelete(ref TInput input);
+            bool SetDelete(ref TInput input, bool value);
         }
 
         /// <summary>
         /// Input to PsfRead operations on the secondary FasterKV instance
         /// </summary>
-        internal unsafe struct PSFInput : IDisposable, IPSFInput
+        internal unsafe struct PSFInput : IDisposable
         {
             private SectorAlignedMemory keyPointerMem;
 
