@@ -339,7 +339,7 @@ namespace PSF.Index
 #region Create new record in the mutable region
             CreateNewRecord:
             {
-                var functions = context as IInputAccessor<TInput>;
+                var functions = (context as PSFContext).Functions as IInputAccessor<TInput>;
 
                 // Create the new record. Because we are updating multiple hash buckets, mark the record as invalid to start,
                 // so it is not visible until we have successfully updated all chains.

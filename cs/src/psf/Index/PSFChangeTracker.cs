@@ -12,6 +12,7 @@ namespace PSF.Index
 {
     public enum UpdateOperation
     {
+        AwaitPending,   // We don't know yet; will have to await the *CompletionCallback method to set it.
         Insert,
         IPU,
         RCU,

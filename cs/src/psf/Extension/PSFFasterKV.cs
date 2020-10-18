@@ -32,10 +32,18 @@ namespace FASTER.PSF
         /// <summary>
         /// Provides a PSF wrapper for a <see cref="FasterKV{Key, Value}"/> instance.
         /// </summary>
-        public static PSFFasterKV<TKVKey, TKVValue> GetOrCreateWrapper(FasterKV<TKVKey, TKVValue> fkv) 
+        internal static PSFFasterKV<TKVKey, TKVValue> GetOrCreateWrapper(FasterKV<TKVKey, TKVValue> fkv) 
             => fkvDictionary.TryGetValue(fkv, out var psfKV)
                 ? psfKV
                 : fkvDictionary.GetOrAdd(fkv, new PSFFasterKV<TKVKey, TKVValue>(fkv));
+
+        public PSFFasterKV(long size, LogSettings logSettings,
+                           CheckpointSettings checkpointSettings = null, SerializerSettings<TKVKey, TKVValue> serializerSettings = null,
+                           IFasterEqualityComparer<TKVKey> comparer = null,
+                           VariableLengthStructSettings<TKVKey, TKVValue> variableLengthStructSettings = null)
+            : this(new FasterKV<TKVKey, TKVValue>(size, logSettings, checkpointSettings, serializerSettings, comparer, variableLengthStructSettings))
+            => fkvDictionary.GetOrAdd(fkv, this);
+
 
         #region PSF Registration API
         /// <inheritdoc/>
@@ -67,11 +75,13 @@ namespace FASTER.PSF
 
         #region New Session Operations
 
+        [Obsolete("PSF sessions must use NewPSFSession", true)]
         public ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> NewSession<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId = null, 
                                 bool threadAffinitized = false, IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
             where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
             => throw new PSFInvalidOperationException("Must use NewPSFSession");
 
+        [Obsolete("PSF sessions must use ResumePSFSession", true)]
         public ClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> ResumeSession<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId, 
                                 out CommitPoint commitPoint, bool threadAffinitized = false, IVariableLengthStruct<TKVValue, TInput> variableLengthStruct = null)
             where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
@@ -82,7 +92,7 @@ namespace FASTER.PSF
             where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
             var wrapperFunctions = new WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
-            var session = this.fkv.For(wrapperFunctions).NewSession<Functions>(sessionId, threadAffinitized, variableLengthStruct);
+            var session = this.fkv.For(wrapperFunctions).NewSession<WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>>(sessionId, threadAffinitized, variableLengthStruct);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>();
             var livenessSession = this.fkv.NewSession(livenessFunctions);
             return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, wrapperFunctions, session, livenessFunctions, livenessSession, this.psfManager);
@@ -93,7 +103,7 @@ namespace FASTER.PSF
             where Functions : IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
             var wrapperFunctions = new WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
-            var session = this.fkv.For(wrapperFunctions).ResumeSession<Functions>(sessionId, out commitPoint, threadAffinitized, variableLengthStruct);
+            var session = this.fkv.For(wrapperFunctions).ResumeSession<WrapperFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>>(sessionId, out commitPoint, threadAffinitized, variableLengthStruct);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>();
             var livenessSession = this.fkv.NewSession(livenessFunctions);
             return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, wrapperFunctions, session, livenessFunctions, livenessSession, this.psfManager);

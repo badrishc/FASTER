@@ -31,7 +31,7 @@ namespace FASTER.core
         private unsafe ref RecordInfo GetRecordInfo(long logicalAddress)
         {
             VerifyAddress(logicalAddress);
-            return ref this.fkv.hlog.GetInfo(logicalAddress);
+            return ref this.fkv.hlog.GetInfo(this.fkv.hlog.GetPhysicalAddress(logicalAddress));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

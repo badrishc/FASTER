@@ -50,7 +50,6 @@ namespace FASTER.PSF
 
         public void SingleWriter(ref TKVKey key, ref TKVValue oldValue, ref TKVValue newValue, long logicalAddress)
         {
-            var isDelete = this.recordAccessor.IsTombstone(logicalAddress);
             this.userFunctions.SingleWriter(ref key, ref oldValue, ref newValue, logicalAddress);
 
             // This is called in the following cases:
@@ -66,22 +65,35 @@ namespace FASTER.PSF
             //    query-time liveness check will see the Key resolved at a higher address and short-circuit before reporting duplicates at the
             //    old record address.
 
-            if (isDelete)
+            // SingleWriter can't detect isDelete from logicalAddress on a pending callback; PhysicalAddress will not be in memory.
+            // So we have to defer to UpsertCompletionCallback or DeleteCompletionCallback.
+            if (this.recordAccessor.IsInMemory(logicalAddress))
             {
-                this.ChangeTracker = this.psfManager.CreateChangeTracker();
-                SetBeforeData(ref key, logicalAddress, isIpu: false);
-                this.ChangeTracker.UpdateOp = UpdateOperation.Delete;
+                var isDelete = this.recordAccessor.IsTombstone(logicalAddress);
+
+                if (isDelete)
+                {
+                    this.ChangeTracker = this.psfManager.CreateChangeTracker();
+                    SetBeforeData(ref key, logicalAddress, isIpu: false);
+                    this.ChangeTracker.UpdateOp = UpdateOperation.Delete;
+                    return;
+                }
+
+                // Because we do not have the old logicalAddress, we cannot RCU; instead we must simply insert a new record, using the fast path.
+                //if (oldAddress != Constants.kInvalidAddress) SetRCU(ref key, oldAddress, newAddress);
+                this.LogicalAddress = logicalAddress;
                 return;
             }
 
-            // Because we do not have the old logicalAddress, we cannot RCU; instead we must simply insert a new record, using the fast path.
-            //if (oldAddress != Constants.kInvalidAddress) SetRCU(ref key, oldAddress, newAddress);
-            this.LogicalAddress = logicalAddress;
+            // We'll await *CompletionCallback to set UpdateOp. No optimization is possible for inserts here; they will go through the ChangeTracker path.
+            this.ChangeTracker = this.psfManager.CreateChangeTracker();
+            SetBeforeData(ref key, logicalAddress, isIpu: false);
+            this.ChangeTracker.UpdateOp = UpdateOperation.AwaitPending;
         }
 
-        public bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress = -1)
+        public bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)
         {
-            // Save the PreUpdate values.
+            // Save the PreUpdate values. Note: this is only called for in-memory writes.
             this.ChangeTracker = this.psfManager.CreateChangeTracker();
             var isDelete = this.recordAccessor.IsTombstone(logicalAddress);
             SetBeforeData(ref key, logicalAddress, isIpu: !isDelete);
@@ -133,10 +145,8 @@ namespace FASTER.PSF
         private void EnqueueTracker()
         {
             if (!(this.ChangeTracker is null))
-            {
                 this.Queue.Enqueue(this.ChangeTracker);
-                this.ChangeTracker = null;
-            }
+            this.Clear();
         }
 
         public void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, Status status)
@@ -147,12 +157,16 @@ namespace FASTER.PSF
 
         public void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx)
         {
+            if (!(this.ChangeTracker is null))
+                this.ChangeTracker.UpdateOp = UpdateOperation.Insert;
             this.EnqueueTracker();
             this.userFunctions.UpsertCompletionCallback(ref key, ref value, ctx);
         }
 
         public void DeleteCompletionCallback(ref TKVKey key, Context ctx)
         {
+            if (!(this.ChangeTracker is null))
+                this.ChangeTracker.UpdateOp = UpdateOperation.Delete;
             this.EnqueueTracker();
             this.userFunctions.DeleteCompletionCallback(ref key, ctx);
         }

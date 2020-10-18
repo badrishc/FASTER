@@ -440,7 +440,7 @@ namespace FASTER.core
                 // this is an insert; otherwise the old record was valid but not in the mutable range (that's handled above), but it's above
                 // HeadAddress, so we can get the old value and this is an RCU.
                 var oldAddress = (logicalAddress < hlog.HeadAddress || hlog.GetInfo(physicalAddress).Tombstone) ? Constants.kInvalidAddress : logicalAddress;
-                fasterSession.SingleWriter(ref key, ref value, ref hlog.GetValue(newPhysicalAddress), logicalAddress);
+                fasterSession.SingleWriter(ref key, ref value, ref hlog.GetValue(newPhysicalAddress), newLogicalAddress);
 
                 var updatedEntry = default(HashBucketEntry);
                 updatedEntry.Tag = tag;
