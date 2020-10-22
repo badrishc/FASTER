@@ -221,7 +221,7 @@ namespace FASTER.core
                 switch (pendingContext.type)
                 {
                     case OperationType.RMW:
-                        internalStatus = InternalRMW(ref key, ref pendingContext.input, ref pendingContext.userContext, ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
+                        internalStatus = InternalRMW(ref key, ref pendingContext.input.Get(), ref pendingContext.userContext, ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
                         break;
                     case OperationType.UPSERT:
                         internalStatus = InternalUpsert(ref key, ref pendingContext.value.Get(), ref pendingContext.userContext, ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
@@ -255,7 +255,7 @@ namespace FASTER.core
                 {
                     case OperationType.RMW:
                         fasterSession.RMWCompletionCallback(ref key,
-                                                ref pendingContext.input,
+                                                ref pendingContext.input.Get(),
                                                 pendingContext.userContext, status);
                         break;
                     case OperationType.UPSERT:
@@ -386,18 +386,21 @@ namespace FASTER.core
 
                 if (pendingContext.type == OperationType.READ)
                 {
+                    RecordInfo recordInfo;
+                    unsafe { recordInfo = hlog.GetInfoFromBytePointer(request.record.GetValidPointer()); }
+
                     // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
                     fasterSession.ReadCompletionCallback(ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref key,
-                                                     ref pendingContext.input,
+                                                     ref pendingContext.input.Get(),
                                                      ref pendingContext.output,
                                                      pendingContext.userContext,
                                                      status,
-                                                     pendingContext.recordInfo);
+                                                     recordInfo);
                 }
                 else
                 {
                     fasterSession.RMWCompletionCallback(ref key,
-                                                    ref pendingContext.input,
+                                                    ref pendingContext.input.Get(),
                                                     pendingContext.userContext,
                                                     status);
                 }

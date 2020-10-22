@@ -15,17 +15,17 @@ namespace FASTER.core
         void AtomicSwitch(int version);
     }
 
+#if DEBUG
     /// <summary>
-    /// Public interface for a client session.
+    /// Public interface for a client session. DEBUG-only because clients should prefer concrete types rather than interfaces, for performance reasons;
+    /// but this ensures consistency across IClientSession and IAdvancedClientSession.
     /// </summary>
     /// <typeparam name="Key"></typeparam>
     /// <typeparam name="Value"></typeparam>
     /// <typeparam name="Input"></typeparam>
     /// <typeparam name="Output"></typeparam>
     /// <typeparam name="Context"></typeparam>
-    /// <typeparam name="Functions"></typeparam>
-    public interface IClientSession<Key, Value, Input, Output, Context, Functions> : IDisposable
-            where Functions : IFunctions<Key, Value, Input, Output, Context>
+    public interface IClientSession<Key, Value, Input, Output, Context>
     {
         /// <summary>
         /// Get session ID
@@ -84,20 +84,31 @@ namespace FASTER.core
         public (Status, Output) Read(Key key, Context userContext = default, long serialNo = 0);
 
         /// <summary>
-        /// Read operation that accepts a <paramref name="startAddress"/> to start the lookup at instead of starting at the hash table entry for <paramref name="key"/>,
-        ///     and returns the <see cref="RecordInfo"/> for the found record (which contains previous address in the hash chain for this key; this can
-        ///     be used as <paramref name="startAddress"/> in a subsequent call to iterate all records for <paramref name="key"/>).
+        /// Read operation that accepts a <paramref name="recordInfo"/> ref argument to start the lookup at instead of starting at the hash table entry for <paramref name="key"/>,
+        ///     and is updated with the record header for the found record (which contains previous address in the hash chain for this key; this can
+        ///     be used as <paramref name="recordInfo"/> in a subsequent call to iterate all records for <paramref name="key"/>).
         /// </summary>
         /// <param name="key">The key to look up</param>
         /// <param name="input">Input to help extract the retrieved value into <paramref name="output"/></param>
         /// <param name="output">The location to place the retrieved value</param>
-        /// <param name="startAddress">Start at this address rather than the address in the hash table for <paramref name="key"/>"/></param>
-        /// <param name="recordInfo">Receives a copy of the record's header. From this the <see cref="RecordInfo.PreviousAddress"/> can be obtained and passed
-        ///     in a subsequent call as <paramref name="startAddress"/>, thereby enumerating all records in a hash chain.</param>
+        /// <param name="recordInfo">On input contains the address to start at in its <see cref="RecordInfo.PreviousAddress"/>; if this is Constants.kInvalidAddress, the
+        ///     search starts with the key as in other forms of Read. On output, receives a copy of the record's header, which can be passed
+        ///     in a subsequent call, thereby enumerating all records in a key's hash chain.</param>
         /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
         /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
         /// <returns><paramref name="output"/> is populated by the <see cref="IFunctions{Key, Value, Context}"/> implementation</returns>
-        public Status Read(ref Key key, ref Input input, ref Output output, long startAddress, out RecordInfo recordInfo, Context userContext = default, long serialNo = 0);
+        public Status Read(ref Key key, ref Input input, ref Output output, ref RecordInfo recordInfo, Context userContext = default, long serialNo = 0);
+
+        /// <summary>
+        /// Read operation that accepts an <paramref name="address"/> argument to lookup at, instead of a key.
+        /// </summary>
+        /// <param name="address">The address to look up</param>
+        /// <param name="input">Input to help extract the retrieved value into <paramref name="output"/></param>
+        /// <param name="output">The location to place the retrieved value</param>
+        /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
+        /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
+        /// <returns><paramref name="output"/> is populated by the <see cref="IFunctions{Key, Value, Context}"/> implementation; this should store the key if it needs it</returns>
+        public Status ReadAtAddress(long address, ref Input input, ref Output output, Context userContext = default, long serialNo = 0);
 
         /// <summary>
         /// Async read operation. May return uncommitted results; to ensure reading of committed results, complete the read and then call WaitForCommitAsync.
@@ -107,11 +118,11 @@ namespace FASTER.core
         /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
         /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
         /// <param name="cancellationToken">Token to cancel the operation</param>
-        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete()"/>
-        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete(out RecordInfo)"/> 
+        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete()"/>
+        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete(out RecordInfo)"/> 
         ///     on the return value to complete the read operation and obtain the result status, the output that is populated by the 
         ///     <see cref="IFunctions{Key, Value, Context}"/> implementation, and optionally a copy of the header for the retrieved record</returns>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Async read operation. May return uncommitted results; to ensure reading of committed results, complete the read and then call WaitForCommitAsync.
@@ -121,11 +132,11 @@ namespace FASTER.core
         /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
         /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
         /// <param name="cancellationToken">Token to cancel the operation</param>
-        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete()"/>
-        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete(out RecordInfo)"/> 
+        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete()"/>
+        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete(out RecordInfo)"/> 
         ///     on the return value to complete the read operation and obtain the result status, the output that is populated by the 
         ///     <see cref="IFunctions{Key, Value, Context}"/> implementation, and optionally a copy of the header for the retrieved record</returns>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(Key key, Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(Key key, Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Async read operation. May return uncommitted results; to ensure reading of committed results, complete the read and then call WaitForCommitAsync.
@@ -134,11 +145,11 @@ namespace FASTER.core
         /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
         /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
         /// <param name="token">Token to cancel the operation</param>
-        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete()"/>
-        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete(out RecordInfo)"/> 
+        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete()"/>
+        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete(out RecordInfo)"/> 
         ///     on the return value to complete the read operation and obtain the result status, the output that is populated by the 
         ///     <see cref="IFunctions{Key, Value, Context}"/> implementation, and optionally a copy of the header for the retrieved record</returns>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, Context userContext = default, long serialNo = 0, CancellationToken token = default);
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, Context userContext = default, long serialNo = 0, CancellationToken token = default);
 
         /// <summary>
         /// Async read operation, may return uncommitted result
@@ -148,11 +159,11 @@ namespace FASTER.core
         /// <param name="context"></param>
         /// <param name="serialNo"></param>
         /// <param name="token"></param>
-        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete()"/>
-        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete(out RecordInfo)"/> 
+        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete()"/>
+        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete(out RecordInfo)"/> 
         ///     on the return value to complete the read operation and obtain the result status, the output that is populated by the 
         ///     <see cref="IFunctions{Key, Value, Context}"/> implementation, and optionally a copy of the header for the retrieved record</returns>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(Key key, Context context = default, long serialNo = 0, CancellationToken token = default);
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(Key key, Context context = default, long serialNo = 0, CancellationToken token = default);
 
         /// <summary>
         /// Async read operation that accepts a <paramref name="startAddress"/> to start the lookup at instead of starting at the hash table entry for <paramref name="key"/>,
@@ -165,36 +176,25 @@ namespace FASTER.core
         /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
         /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
         /// <param name="cancellationToken">Token to cancel the operation</param>
-        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete()"/>
-        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete(out RecordInfo)"/> 
+        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete()"/>
+        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete(out RecordInfo)"/> 
         ///     on the return value to complete the read operation and obtain the result status, the output that is populated by the 
         ///     <see cref="IFunctions{Key, Value, Context}"/> implementation, and optionally a copy of the header for the retrieved record</returns>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, long startAddress, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, ref Input input, long startAddress, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Read operation to obtain the Key from a logicalAddress.
+        /// Async Read operation that accepts an <paramref name="address"/> argument to lookup at, instead of a key.
         /// </summary>
-        /// <param name="logicalAddress">The logical address to obtain the key for</param>
-        /// <param name="input">Input to help extract the retrieved key into output</param>
-        /// <param name="output">The location to place the retrieved key</param>
-        /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
-        /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
-        /// <returns><paramref name="output"/> is populated by the <see cref="IFunctions{Key, Value, Context}"/> implementation</returns>
-        public Status GetKey(long logicalAddress, ref Input input, ref Output output, Context userContext = default, long serialNo = 0);
-
-        /// <summary>
-        /// Async Read operation to obtain the Key from a logicalAddress.
-        /// </summary>
-        /// <param name="logicalAddress">The logical address to obtain the key for</param>
-        /// <param name="input">Input to help extract the retrieved key into output</param>
+        /// <param name="address">The address to look up</param>
+        /// <param name="input">Input to help extract the retrieved value into output</param>
         /// <param name="userContext">User application context passed in case the read goes pending due to IO</param>
         /// <param name="serialNo">The serial number of the operation (used in recovery)</param>
         /// <param name="cancellationToken">Token to cancel the operation</param>
-        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete()"/>
-        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context, Functions}.Complete(out RecordInfo)"/> 
+        /// <returns>ReadAsyncResult - call <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete()"/>
+        ///     or <see cref="FasterKV{Key, Value}.ReadAsyncResult{Input, Output, Context}.Complete(out RecordInfo)"/> 
         ///     on the return value to complete the read operation and obtain the result status, the output that is populated by the 
         ///     <see cref="IFunctions{Key, Value, Context}"/> implementation, and optionally a copy of the header for the retrieved record</returns>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> GetKeyAsync(long logicalAddress, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAtAddressAsync(long address, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Upsert operation
@@ -236,7 +236,7 @@ namespace FASTER.core
         /// <param name="serialNo"></param>
         /// <param name="token"></param>
         /// <returns></returns>
-        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default);
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default);
 
         /// <summary>
         /// Async RMW operation
@@ -248,7 +248,7 @@ namespace FASTER.core
         /// <param name="serialNo"></param>
         /// <param name="token"></param>
         /// <returns></returns>
-        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default);
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context>> RMWAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default);
 
         /// <summary>
         /// Delete operation
@@ -311,4 +311,5 @@ namespace FASTER.core
         /// <returns></returns>
         public ValueTask WaitForCommitAsync(CancellationToken token = default);
     }
+#endif
 }

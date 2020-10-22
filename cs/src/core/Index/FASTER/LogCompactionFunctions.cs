@@ -21,16 +21,16 @@ namespace FASTER.core
         }
 
         public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) { }
-        public void ConcurrentReader(ref Key key, ref Empty input, ref Value value, ref Empty dst, long logAddress) { }
-        public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logAddress) { return _functions.CopyInPlace(ref src, ref dst, _allocator.ValueLength); }
+        public void ConcurrentReader(ref Key key, ref Empty input, ref Value value, ref Empty dst) { }
+        public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst) { return _functions.CopyInPlace(ref src, ref dst, _allocator.ValueLength); }
         public bool NeedCopyUpdate(ref Key key, ref Empty input, ref Value oldValue) => true;
-        public void CopyUpdater(ref Key key, ref Empty input, ref Value oldValue, ref Value newValue, long oldLogAddress, long newLogAddress) { }
-        public void InitialUpdater(ref Key key, ref Empty input, ref Value value, long logAddress) { }
-        public bool InPlaceUpdater(ref Key key, ref Empty input, ref Value value, long logAddress) => false;
-        public void ReadCompletionCallback(ref Key key, ref Empty input, ref Empty output, Empty ctx, Status status, RecordInfo recordInfo) { }
+        public void CopyUpdater(ref Key key, ref Empty input, ref Value oldValue, ref Value newValue) { }
+        public void InitialUpdater(ref Key key, ref Empty input, ref Value value) { }
+        public bool InPlaceUpdater(ref Key key, ref Empty input, ref Value value) => false;
+        public void ReadCompletionCallback(ref Key key, ref Empty input, ref Empty output, Empty ctx, Status status) { }
         public void RMWCompletionCallback(ref Key key, ref Empty input, Empty ctx, Status status) { }
-        public void SingleReader(ref Key key, ref Empty input, ref Value value, ref Empty dst, long logAddress) { }
-        public void SingleWriter(ref Key key, ref Value src, ref Value dst, long logAddress) { _functions.Copy(ref src, ref dst, _allocator.ValueLength); }
+        public void SingleReader(ref Key key, ref Empty input, ref Value value, ref Empty dst) { }
+        public void SingleWriter(ref Key key, ref Value src, ref Value dst) { _functions.Copy(ref src, ref dst, _allocator.ValueLength); }
         public void UpsertCompletionCallback(ref Key key, ref Value value, Empty ctx) { }
         public void DeleteCompletionCallback(ref Key key, Empty ctx) { }
     }
@@ -46,16 +46,16 @@ namespace FASTER.core
         }
 
         public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) { }
-        public void ConcurrentReader(ref Key key, ref Empty input, ref Value value, ref Empty dst, long logAddress) { }
-        public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logAddress) { return _functions.CopyInPlace(ref src, ref dst, null); }
+        public void ConcurrentReader(ref Key key, ref Empty input, ref Value value, ref Empty dst) { }
+        public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst) { return _functions.CopyInPlace(ref src, ref dst, null); }
         public bool NeedCopyUpdate(ref Key key, ref Empty input, ref Value oldValue) => true;
-        public void CopyUpdater(ref Key key, ref Empty input, ref Value oldValue, ref Value newValue, long oldLogAddress, long newLogAddress) { }
-        public void InitialUpdater(ref Key key, ref Empty input, ref Value value, long logAddress) { }
-        public bool InPlaceUpdater(ref Key key, ref Empty input, ref Value value, long logAddress) { return true; }
-        public void ReadCompletionCallback(ref Key key, ref Empty input, ref Empty output, Empty ctx, Status status, RecordInfo recordInfo) { }
+        public void CopyUpdater(ref Key key, ref Empty input, ref Value oldValue, ref Value newValue) { }
+        public void InitialUpdater(ref Key key, ref Empty input, ref Value value) { }
+        public bool InPlaceUpdater(ref Key key, ref Empty input, ref Value value) { return true; }
+        public void ReadCompletionCallback(ref Key key, ref Empty input, ref Empty output, Empty ctx, Status status) { }
         public void RMWCompletionCallback(ref Key key, ref Empty input, Empty ctx, Status status) { }
-        public void SingleReader(ref Key key, ref Empty input, ref Value value, ref Empty dst, long logAddress) { }
-        public void SingleWriter(ref Key key, ref Value src, ref Value dst, long logAddress) { _functions.Copy(ref src, ref dst, null); }
+        public void SingleReader(ref Key key, ref Empty input, ref Value value, ref Empty dst) { }
+        public void SingleWriter(ref Key key, ref Value src, ref Value dst) { _functions.Copy(ref src, ref dst, null); }
         public void UpsertCompletionCallback(ref Key key, ref Value value, Empty ctx) { }
         public void DeleteCompletionCallback(ref Key key, Empty ctx) { }
     }

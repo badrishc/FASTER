@@ -179,7 +179,7 @@ namespace FASTER.test.recovery.sumstore.recover_continue
         {
         }
 
-        public void ReadCompletionCallback(ref AdId key, ref AdInput input, ref Output output, Empty ctx, Status status, RecordInfo recordInfo)
+        public void ReadCompletionCallback(ref AdId key, ref AdInput input, ref Output output, Empty ctx, Status status)
         {
             Assert.IsTrue(status == Status.OK);
             Assert.IsTrue(output.value.numClicks == key.adId);
@@ -199,35 +199,35 @@ namespace FASTER.test.recovery.sumstore.recover_continue
         }
 
         // Read functions
-        public void SingleReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst, long logAddress)
+        public void SingleReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst)
         {
             dst.value = value;
         }
 
-        public void ConcurrentReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst, long logAddress)
+        public void ConcurrentReader(ref AdId key, ref AdInput input, ref NumClicks value, ref Output dst)
         {
             dst.value = value;
         }
 
         // Upsert functions
-        public void SingleWriter(ref AdId key, ref NumClicks src, ref NumClicks dst, long logAddress)
+        public void SingleWriter(ref AdId key, ref NumClicks src, ref NumClicks dst)
         {
             dst = src;
         }
 
-        public bool ConcurrentWriter(ref AdId key, ref NumClicks src, ref NumClicks dst, long logAddress)
+        public bool ConcurrentWriter(ref AdId key, ref NumClicks src, ref NumClicks dst)
         {
             dst = src;
             return true;
         }
 
         // RMW functions
-        public void InitialUpdater(ref AdId key, ref AdInput input, ref NumClicks value, long logAddress)
+        public void InitialUpdater(ref AdId key, ref AdInput input, ref NumClicks value)
         {
             value = input.numClicks;
         }
 
-        public bool InPlaceUpdater(ref AdId key, ref AdInput input, ref NumClicks value, long logAddress)
+        public bool InPlaceUpdater(ref AdId key, ref AdInput input, ref NumClicks value)
         {
             Interlocked.Add(ref value.numClicks, input.numClicks.numClicks);
             return true;
@@ -235,7 +235,7 @@ namespace FASTER.test.recovery.sumstore.recover_continue
 
         public bool NeedCopyUpdate(ref AdId key, ref AdInput input, ref NumClicks oldValue) => true;
 
-        public void CopyUpdater(ref AdId key, ref AdInput input, ref NumClicks oldValue, ref NumClicks newValue, long oldLogAddress, long newLogAddress)
+        public void CopyUpdater(ref AdId key, ref AdInput input, ref NumClicks oldValue, ref NumClicks newValue)
         {
             newValue.numClicks += oldValue.numClicks + input.numClicks.numClicks;
         }

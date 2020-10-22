@@ -331,12 +331,12 @@ namespace FASTER.core
 
             public void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress)
             {
-                _fasterKV._functions.ConcurrentReader(ref key, ref input, ref value, ref dst, logicalAddress);
+                _fasterKV._functions.ConcurrentReader(ref key, ref input, ref value, ref dst);
             }
 
             public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress)
             {
-                return _fasterKV._functions.ConcurrentWriter(ref key, ref src, ref dst, logicalAddress);
+                return _fasterKV._functions.ConcurrentWriter(ref key, ref src, ref dst);
             }
 
             public bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue)
@@ -344,7 +344,7 @@ namespace FASTER.core
 
             public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress)
             {
-                _fasterKV._functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue, oldLogicalAddress, newLogicalAddress);
+                _fasterKV._functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue);
             }
 
             public void DeleteCompletionCallback(ref Key key, Context ctx)
@@ -364,22 +364,22 @@ namespace FASTER.core
 
             public void InitialUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress)
             {
-                _fasterKV._functions.InitialUpdater(ref key, ref input, ref value, logicalAddress);
+                _fasterKV._functions.InitialUpdater(ref key, ref input, ref value);
             }
 
             public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress)
             {
-                return _fasterKV._functions.InPlaceUpdater(ref key, ref input, ref value, logicalAddress);
+                return _fasterKV._functions.InPlaceUpdater(ref key, ref input, ref value);
             }
 
             public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status)
             {
-                _fasterKV._functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, default);
+                _fasterKV._functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status);
             }
 
             public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
             {
-                _fasterKV._functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
+                _fasterKV._functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status);
             }
 
             public void RMWCompletionCallback(ref Key key, ref Input input, Context ctx, Status status)
@@ -389,12 +389,12 @@ namespace FASTER.core
 
             public void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress)
             {
-                _fasterKV._functions.SingleReader(ref key, ref input, ref value, ref dst, logicalAddress);
+                _fasterKV._functions.SingleReader(ref key, ref input, ref value, ref dst);
             }
 
             public void SingleWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress)
             {
-                _fasterKV._functions.SingleWriter(ref key, ref src, ref dst, logicalAddress);
+                _fasterKV._functions.SingleWriter(ref key, ref src, ref dst);
             }
 
             public void UnsafeResumeThread()
@@ -408,6 +408,11 @@ namespace FASTER.core
             public void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx)
             {
                 _fasterKV._functions.UpsertCompletionCallback(ref key, ref value, ctx);
+            }
+
+            public IHeapContainer<Input> GetHeapContainer(ref Input input)
+            {
+                return new StandardHeapContainer<Input>(ref input);
             }
         }
     }

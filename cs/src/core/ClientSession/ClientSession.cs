@@ -21,7 +21,10 @@ namespace FASTER.core
     /// <typeparam name="Output"></typeparam>
     /// <typeparam name="Context"></typeparam>
     /// <typeparam name="Functions"></typeparam>
-    public sealed class ClientSession<Key, Value, Input, Output, Context, Functions> : IClientSession, IClientSession<Key, Value, Input, Output, Context, Functions>
+    public sealed class ClientSession<Key, Value, Input, Output, Context, Functions> : IClientSession, IDisposable
+#if DEBUG
+        , IClientSession<Key, Value, Input, Output, Context>
+#endif
         where Functions : IFunctions<Key, Value, Input, Output, Context>
     {
         private readonly FasterKV<Key, Value> fht;
@@ -32,6 +35,7 @@ namespace FASTER.core
 
         internal readonly Functions functions;
         internal readonly IVariableLengthStruct<Value, Input> variableLengthStruct;
+        internal readonly IVariableLengthStruct<Input> inputVariableLengthStruct;
 
         internal readonly AsyncFasterSession FasterSession;
 
@@ -40,7 +44,7 @@ namespace FASTER.core
             FasterKV<Key, Value>.FasterExecutionContext<Input, Output, Context> ctx,
             Functions functions,
             bool supportAsync,
-            IVariableLengthStruct<Value, Input> variableLengthStruct)
+            SessionVariableLengthStructSettings<Value, Input> sessionVariableLengthStructSettings = null)
         {
             this.fht = fht;
             this.ctx = ctx;
@@ -49,7 +53,7 @@ namespace FASTER.core
             LatestCommitPoint = new CommitPoint { UntilSerialNo = -1, ExcludedSerialNos = null };
             FasterSession = new AsyncFasterSession(this);
 
-            this.variableLengthStruct = variableLengthStruct;
+            this.variableLengthStruct = sessionVariableLengthStructSettings?.valueLength;
             if (this.variableLengthStruct == default)
             {
                 if (fht.hlog is VariableLengthBlittableAllocator<Key, Value> allocator)
@@ -64,6 +68,13 @@ namespace FASTER.core
                     Debug.WriteLine("Warning: Session param of variableLengthStruct provided for non-varlen allocator");
             }
 
+            this.inputVariableLengthStruct = sessionVariableLengthStructSettings?.inputLength;
+
+            if (typeof(Input) == typeof(SpanByte) && inputVariableLengthStruct == default)
+            {
+                inputVariableLengthStruct = new SpanByteLength() as IVariableLengthStruct<Input>;
+            }
+            
             // Session runs on a single thread
             if (!supportAsync)
                 UnsafeResumeThread();
@@ -144,14 +155,23 @@ namespace FASTER.core
             return (Read(ref key, ref input, ref output, userContext, serialNo), output);
         }
 
+#if DEBUG
+        internal const string AdvancedOnlyMethodErr = "This method is not available on non-Advanced ClientSessions";
+
+        /// <summary>This method is not available for non-Advanced ClientSessions, because ReadCompletionCallback does not have RecordInfo.</summary>
+        [Obsolete(AdvancedOnlyMethodErr)]
+        public Status Read(ref Key key, ref Input input, ref Output output, ref RecordInfo recordInfo, Context userContext = default, long serialNo = 0) 
+            => throw new FasterException(AdvancedOnlyMethodErr);
+#endif // DEBUG;
+
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Status Read(ref Key key, ref Input input, ref Output output, long startAddress, out RecordInfo recordInfo, Context userContext = default, long serialNo = 0)
+        public Status ReadAtAddress(long address, ref Input input, ref Output output, Context userContext = default, long serialNo = 0)
         {
             if (SupportAsync) UnsafeResumeThread();
             try
             {
-                return fht.ContextRead(ref key, ref input, ref output, startAddress, out recordInfo, userContext, FasterSession, serialNo, ctx);
+                return fht.ContextReadAtAddress(address, ref input, ref output, userContext, FasterSession, serialNo, ctx);
             }
             finally
             {
@@ -161,55 +181,52 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
             Debug.Assert(SupportAsync, "Session does not support async operations");
-            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, cancellationToken);
+            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, cancellationToken);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
             Debug.Assert(SupportAsync, "Session does not support async operations");
-            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
+            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, Context userContext = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, Context userContext = default, long serialNo = 0, CancellationToken token = default)
         {
             Debug.Assert(SupportAsync, "Session does not support async operations");
             Input input = default;
-            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, token);
+            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(Key key, Context context = default, long serialNo = 0, CancellationToken token = default)
-        {
-            Input input = default;
-            return fht.ReadAsync(this, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
-        }
-
-        /// <inheritdoc/>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> ReadAsync(ref Key key, ref Input input, long startAddress, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(Key key, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
             Debug.Assert(SupportAsync, "Session does not support async operations");
-            return fht.ReadAsync(this, ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
+            Input input = default;
+            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
         }
 
-        /// <inheritdoc/>
-        public Status GetKey(long logicalAddress, ref Input input, ref Output output, Context userContext = default, long serialNo = 0)
-        {
-            throw new FasterException("GetKey NYI");
-        }
+#if DEBUG
+        /// <summary>For consistency with Read(.., ref RecordInfo, ...), this method is not available for non-Advanced ClientSessions.</summary>
+        [Obsolete(AdvancedOnlyMethodErr)]
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, ref Input input, long startAddress, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+            => throw new FasterException(AdvancedOnlyMethodErr);
+#endif
 
         /// <inheritdoc/>
-        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> GetKeyAsync(long logicalAddress, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAtAddressAsync(long address, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
-            throw new FasterException("GetKeyAsync NYI");
+            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Key key = default;
+            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, address, userContext, serialNo, cancellationToken, noKey: true);
         }
 
         /// <inheritdoc/>
@@ -254,15 +271,15 @@ namespace FASTER.core
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
             Debug.Assert(SupportAsync, "Session does not support async operations");
-            return fht.RmwAsync(this, ref key, ref input, context, serialNo, token);
+            return fht.RmwAsync(this.FasterSession, this.ctx, ref key, ref input, context, serialNo, token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context, Functions>> RMWAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
+        public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context>> RMWAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
             => RMWAsync(ref key, ref input, context, serialNo, token);
 
         /// <inheritdoc/>
@@ -363,7 +380,7 @@ namespace FASTER.core
                 throw new NotSupportedException("Async operations not supported over protected epoch");
 
             // Complete all pending operations on session
-            await fht.CompletePendingAsync(this, token);
+            await fht.CompletePendingAsync(this.FasterSession, this.ctx, token);
 
             // Wait for commit if necessary
             if (waitForCommit)
@@ -378,7 +395,7 @@ namespace FASTER.core
             if (fht.epoch.ThisInstanceProtected())
                 throw new NotSupportedException("Async operations not supported over protected epoch");
 
-            await fht.ReadyToCompletePendingAsync(this, token);
+            await fht.ReadyToCompletePendingAsync(this.ctx, token);
         }
 
         /// <inheritdoc/>
@@ -406,10 +423,7 @@ namespace FASTER.core
             }
         }
 
-        /// <summary>
-        /// Resume session on current thread
-        /// Call SuspendThread before any async op
-        /// </summary>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void UnsafeResumeThread()
         {
@@ -417,9 +431,7 @@ namespace FASTER.core
             fht.InternalRefresh(ctx, FasterSession);
         }
 
-        /// <summary>
-        /// Suspend session on current thread
-        /// </summary>
+        /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void UnsafeSuspendThread()
         {
@@ -432,7 +444,7 @@ namespace FASTER.core
         }
 
         // This is a struct to allow JIT to inline calls (and bypass default interface call mechanism)
-        internal struct AsyncFasterSession : IFasterSession<Key, Value, Input, Output, Context>, IFunctions<Key, Value, Input, Output, Context>
+        internal struct AsyncFasterSession : IFasterSession<Key, Value, Input, Output, Context>, IAdvancedFunctions<Key, Value, Input, Output, Context>
         {
             private readonly ClientSession<Key, Value, Input, Output, Context, Functions> _clientSession;
 
@@ -448,16 +460,16 @@ namespace FASTER.core
             }
 
             public void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress) 
-                => _clientSession.functions.ConcurrentReader(ref key, ref input, ref value, ref dst, logicalAddress);
+                => _clientSession.functions.ConcurrentReader(ref key, ref input, ref value, ref dst);
 
             public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) 
-                => _clientSession.functions.ConcurrentWriter(ref key, ref src, ref dst, logicalAddress);
+                => _clientSession.functions.ConcurrentWriter(ref key, ref src, ref dst);
 
             public bool NeedCopyUpdate(ref Key key, ref Input input, ref Value oldValue)
                 => _clientSession.functions.NeedCopyUpdate(ref key, ref input, ref oldValue);
 
             public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogicalAddress, long newLogicalAddress) 
-                => _clientSession.functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue, oldLogicalAddress, newLogicalAddress);
+                => _clientSession.functions.CopyUpdater(ref key, ref input, ref oldValue, ref newValue);
 
             public void DeleteCompletionCallback(ref Key key, Context ctx) 
                 => _clientSession.functions.DeleteCompletionCallback(ref key, ctx);
@@ -469,22 +481,22 @@ namespace FASTER.core
                 => _clientSession.variableLengthStruct.GetLength(ref t, ref input);
 
             public void InitialUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) 
-                => _clientSession.functions.InitialUpdater(ref key, ref input, ref value, logicalAddress);
+                => _clientSession.functions.InitialUpdater(ref key, ref input, ref value);
 
             public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logicalAddress) 
-                => _clientSession.functions.InPlaceUpdater(ref key, ref input, ref value, logicalAddress);
+                => _clientSession.functions.InPlaceUpdater(ref key, ref input, ref value);
 
-            public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo) 
-                => _clientSession.functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
+            public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
+                => _clientSession.functions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status);
 
             public void RMWCompletionCallback(ref Key key, ref Input input, Context ctx, Status status) 
                 => _clientSession.functions.RMWCompletionCallback(ref key, ref input, ctx, status);
 
             public void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logicalAddress) 
-                => _clientSession.functions.SingleReader(ref key, ref input, ref value, ref dst, logicalAddress);
+                => _clientSession.functions.SingleReader(ref key, ref input, ref value, ref dst);
 
             public void SingleWriter(ref Key key, ref Value src, ref Value dst, long logicalAddress) 
-                => _clientSession.functions.SingleWriter(ref key, ref src, ref dst, logicalAddress);
+                => _clientSession.functions.SingleWriter(ref key, ref src, ref dst);
 
             public void UnsafeResumeThread() 
                 => _clientSession.UnsafeResumeThread();
@@ -492,8 +504,16 @@ namespace FASTER.core
             public void UnsafeSuspendThread() 
                 => _clientSession.UnsafeSuspendThread();
 
-            public void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx) 
+            public void UpsertCompletionCallback(ref Key key, ref Value value, Context ctx)
                 => _clientSession.functions.UpsertCompletionCallback(ref key, ref value, ctx);
+
+            public IHeapContainer<Input> GetHeapContainer(ref Input input)
+            {
+                if (_clientSession.inputVariableLengthStruct == default)
+                    return new StandardHeapContainer<Input>(ref input);
+
+                return new VarLenHeapContainer<Input>(ref input, _clientSession.inputVariableLengthStruct, _clientSession.fht.hlog.bufferPool);
+            }
         }
     }
 }

@@ -48,24 +48,24 @@ namespace FasterPSFSample
             public ObjectOrders InitialUpdateValue { get; set; }
 
             #region Read
-            public void ConcurrentReader(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value, ref Output<ObjectOrders> dst, long logAddress)
+            public void ConcurrentReader(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value, ref Output<ObjectOrders> dst)
                 => dst.Value = value;
 
-            public void SingleReader(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value, ref Output<ObjectOrders> dst, long logAddress)
+            public void SingleReader(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value, ref Output<ObjectOrders> dst)
                 => dst.Value = value;
 
-            public void ReadCompletionCallback(ref Key key, ref Input<ObjectOrders> input, ref Output<ObjectOrders> output, Context<ObjectOrders> context, Status status, RecordInfo recordInfo)
+            public void ReadCompletionCallback(ref Key key, ref Input<ObjectOrders> input, ref Output<ObjectOrders> output, Context<ObjectOrders> context, Status status)
             { /* Output is not set by pending operations */ }
             #endregion Read
 
             #region Upsert
-            public bool ConcurrentWriter(ref Key key, ref ObjectOrders src, ref ObjectOrders dst, long logAddress)
+            public bool ConcurrentWriter(ref Key key, ref ObjectOrders src, ref ObjectOrders dst)
             {
                 dst = src;
                 return true;
             }
 
-            public void SingleWriter(ref Key key, ref ObjectOrders src, ref ObjectOrders dst, long logAddress)
+            public void SingleWriter(ref Key key, ref ObjectOrders src, ref ObjectOrders dst)
                 => dst = src;
 
             public void UpsertCompletionCallback(ref Key key, ref ObjectOrders value, Context<ObjectOrders> context)
@@ -75,13 +75,13 @@ namespace FasterPSFSample
             #region RMW
             public bool NeedCopyUpdate(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value) => true;
 
-            public void CopyUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders oldValue, ref ObjectOrders newValue, long oldLogAddress, long newLogAddress)
+            public void CopyUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders oldValue, ref ObjectOrders newValue)
                 => throw new NotImplementedException();
 
-            public void InitialUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value, long logAddress)
+            public void InitialUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value)
                 => value = input.InitialUpdateValue;
 
-            public bool InPlaceUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value, long logAddress)
+            public bool InPlaceUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value)
             {
                 value.ColorArgb = input.IPUColorInt;
                 return true;

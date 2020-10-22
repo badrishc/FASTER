@@ -38,6 +38,9 @@ namespace FASTER.test
         {
             return sizeof(long);
         }
+
+        public unsafe void Serialize(ref Key source, void* destination)
+            => Buffer.MemoryCopy(Unsafe.AsPointer(ref source), destination, GetLength(ref source), GetLength(ref source));
     }
 
     [StructLayout(LayoutKind.Explicit)]
@@ -58,6 +61,9 @@ namespace FASTER.test
         {
             return sizeof(int) * t.length;
         }
+
+        public unsafe void Serialize(ref VLValue source, void* destination)
+            => Buffer.MemoryCopy(Unsafe.AsPointer(ref source), destination, GetLength(ref source), GetLength(ref source));
 
         public void ToIntArray(ref int[] dst)
         {
@@ -107,7 +113,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref Key key, ref Input input, ref int[] output, Empty ctx, Status status, RecordInfo recordInfo)
+        public void ReadCompletionCallback(ref Key key, ref Input input, ref int[] output, Empty ctx, Status status)
         {
             Assert.IsTrue(status == Status.OK);
             for (int i = 0; i < output.Length; i++)
@@ -130,23 +136,23 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
+        public void SingleReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst)
         {
             value.ToIntArray(ref dst);
         }
 
-        public void ConcurrentReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
+        public void ConcurrentReader(ref Key key, ref Input input, ref VLValue value, ref int[] dst)
         {
             value.ToIntArray(ref dst);
         }
 
         // Upsert functions
-        public void SingleWriter(ref Key key, ref VLValue src, ref VLValue dst, long logAddress)
+        public void SingleWriter(ref Key key, ref VLValue src, ref VLValue dst)
         {
             src.CopyTo(ref dst);
         }
 
-        public bool ConcurrentWriter(ref Key key, ref VLValue src, ref VLValue dst, long logAddress)
+        public bool ConcurrentWriter(ref Key key, ref VLValue src, ref VLValue dst)
         {
             if (src.length != dst.length)
                 return false;
@@ -156,18 +162,18 @@ namespace FASTER.test
         }
 
         // RMW functions
-        public void InitialUpdater(ref Key key, ref Input input, ref VLValue value, long logAddress)
+        public void InitialUpdater(ref Key key, ref Input input, ref VLValue value)
         {
         }
 
-        public bool InPlaceUpdater(ref Key key, ref Input input, ref VLValue value, long logAddress)
+        public bool InPlaceUpdater(ref Key key, ref Input input, ref VLValue value)
         {
             return true;
         }
 
         public bool NeedCopyUpdate(ref Key key, ref Input input, ref VLValue oldValue) => true;
 
-        public void CopyUpdater(ref Key key, ref Input input, ref VLValue oldValue, ref VLValue newValue, long oldLogAddress, long newLogAddress)
+        public void CopyUpdater(ref Key key, ref Input input, ref VLValue oldValue, ref VLValue newValue)
         {
         }
     }
@@ -179,7 +185,7 @@ namespace FASTER.test
             Assert.IsTrue(status == Status.OK);
         }
 
-        public void ReadCompletionCallback(ref VLValue key, ref Input input, ref int[] output, Empty ctx, Status status, RecordInfo recordInfo)
+        public void ReadCompletionCallback(ref VLValue key, ref Input input, ref int[] output, Empty ctx, Status status)
         {
             Assert.IsTrue(status == Status.OK);
             for (int i = 0; i < output.Length; i++)
@@ -202,23 +208,23 @@ namespace FASTER.test
         }
 
         // Read functions
-        public void SingleReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
+        public void SingleReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst)
         {
             value.ToIntArray(ref dst);
         }
 
-        public void ConcurrentReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst, long logAddress)
+        public void ConcurrentReader(ref VLValue key, ref Input input, ref VLValue value, ref int[] dst)
         {
             value.ToIntArray(ref dst);
         }
 
         // Upsert functions
-        public void SingleWriter(ref VLValue key, ref VLValue src, ref VLValue dst, long logAddress)
+        public void SingleWriter(ref VLValue key, ref VLValue src, ref VLValue dst)
         {
             src.CopyTo(ref dst);
         }
 
-        public bool ConcurrentWriter(ref VLValue key, ref VLValue src, ref VLValue dst, long logAddress)
+        public bool ConcurrentWriter(ref VLValue key, ref VLValue src, ref VLValue dst)
         {
             if (src.length != dst.length)
                 return false;
@@ -228,18 +234,18 @@ namespace FASTER.test
         }
 
         // RMW functions
-        public void InitialUpdater(ref VLValue key, ref Input input, ref VLValue value, long logAddress)
+        public void InitialUpdater(ref VLValue key, ref Input input, ref VLValue value)
         {
         }
 
-        public bool InPlaceUpdater(ref VLValue key, ref Input input, ref VLValue value, long logAddress)
+        public bool InPlaceUpdater(ref VLValue key, ref Input input, ref VLValue value)
         {
             return true;
         }
 
         public bool NeedCopyUpdate(ref VLValue key, ref Input input, ref VLValue oldValue) => true;
 
-        public void CopyUpdater(ref VLValue key, ref Input input, ref VLValue oldValue, ref VLValue newValue, long oldLogAddress, long newLogAddress)
+        public void CopyUpdater(ref VLValue key, ref Input input, ref VLValue oldValue, ref VLValue newValue)
         {
         }
     }

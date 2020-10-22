@@ -38,7 +38,7 @@ namespace PSF.Index
             }
         }
 
-        internal bool CancelOnEOS(IPSF psf, (int, int) location) => !(this.OnStreamEnded is null) && !this.OnStreamEnded(psf, location);
+        internal bool CancelOnEOS(IPSF psf, (int, int) location) => this.OnStreamEnded is {} && !this.OnStreamEnded(psf, location);
 
         /// <summary>
         /// Default query settings; let all streams continue to completion.

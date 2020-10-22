@@ -7,8 +7,8 @@ using System.Runtime.CompilerServices;
 
 namespace FASTER.PSF
 {
-    internal class LivenessFunctions<TKVKey, TKVValue> : IFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, 
-                                                         LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>
+    internal class LivenessFunctions<TKVKey, TKVValue> : IAdvancedFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, 
+                                                                            LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>
     {
         public struct Input
         {
@@ -51,10 +51,16 @@ namespace FASTER.PSF
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal void Dispose()
             {
-                this.keyContainer.Dispose();
-                this.keyContainer = null;
-                this.valueContainer.Dispose();
-                this.valueContainer = null;
+                if (this.keyContainer is {})
+                {
+                    this.keyContainer.Dispose();
+                    this.keyContainer = null;
+                }
+                if (this.valueContainer is {})
+                {
+                    this.valueContainer.Dispose();
+                    this.valueContainer = null;
+                }
             }
         }
 
@@ -74,7 +80,7 @@ namespace FASTER.PSF
 
         public virtual void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
         {
-            if (!(input.logAccessor is null))
+            if (input.logAccessor is {})
                 output.SetHeapContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
             else
                 // Only currentAddress is needed here; recordInfo is returned via the Read(..., out RecordInfo recordInfo, ...) parameter
@@ -84,7 +90,7 @@ namespace FASTER.PSF
 
         public virtual void SingleReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
         {
-            if (!(input.logAccessor is null))
+            if (input.logAccessor is {})
                 output.SetHeapContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
             else
                 // Only currentAddress is needed here; recordInfo is returned via the Read(..., out RecordInfo recordInfo, ...) parameter

@@ -11,13 +11,13 @@ namespace PSF.Index
 {
     internal unsafe partial class PSFSecondaryFasterKV<TPSFKey, TRecordId> : FasterKV<TPSFKey, TRecordId>
     {
-        internal class PSFFunctions : IFunctions<TPSFKey, TRecordId, PSFInput, PSFOutput, PSFContext>, IInputAccessor<PSFInput>
+        internal class PSFFunctions : IAdvancedFunctions<TPSFKey, TRecordId, PSFInput, PSFOutput, PSFContext>, IInputAccessor<PSFInput>
         {
-            readonly KeyAccessor<TPSFKey> keyAccessor;
+            readonly KeyAccessor<TPSFKey, TRecordId> keyAccessor;
             readonly RecordAccessor<TPSFKey, TRecordId> recordAccessor;
             internal readonly Queue<PSFOutput> Queue;
 
-            internal PSFFunctions(KeyAccessor<TPSFKey> keyAcc, RecordAccessor<TPSFKey, TRecordId> recordAcc)
+            internal PSFFunctions(KeyAccessor<TPSFKey, TRecordId> keyAcc, RecordAccessor<TPSFKey, TRecordId> recordAcc)
             {
                 this.keyAccessor = keyAcc;
                 this.recordAccessor = recordAcc;
@@ -44,43 +44,56 @@ namespace PSF.Index
             private const string NotUsedForPSF = "PSF-implementing FasterKVs should not use this IFunctions method";
 
             #region Upserts
-            public bool ConcurrentWriter(ref TPSFKey _, ref TRecordId src, ref TRecordId dst, long address) => throw new PSFInternalErrorException(NotUsedForPSF);
+            public bool ConcurrentWriter(ref TPSFKey _, ref TRecordId src, ref TRecordId dst, long logicalAddress) => throw new PSFInternalErrorException(NotUsedForPSF);
 
-            public void SingleWriter(ref TPSFKey _, ref TRecordId src, ref TRecordId dst, long address) => throw new PSFInternalErrorException(NotUsedForPSF);
+            public void SingleWriter(ref TPSFKey _, ref TRecordId src, ref TRecordId dst, long logicalAddress) => throw new PSFInternalErrorException(NotUsedForPSF);
 
             public void UpsertCompletionCallback(ref TPSFKey _, ref TRecordId value, PSFContext ctx) => throw new PSFInternalErrorException(NotUsedForPSF);
 #endregion Upserts
 
             #region Reads
-            public void ConcurrentReader(ref TPSFKey key, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long address)
+            public void ConcurrentReader(ref TPSFKey queryKeyPointerRefAsKeyRef, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long logicalAddress)
             {
-                // Note: ConcurrentReader is not called for ReadCache.
-                Debug.Assert(this.recordAccessor.IsInMemory(address));
-                StoreOutput(ref key, ref input, ref value, ref output, address);
+                // Note: ConcurrentReader is not called for ReadCache, even if we eventually support ReadCache in PSF secondary KVs.
+                Debug.Assert(this.recordAccessor.IsInMemory(logicalAddress));
+                CopyInMemoryDataToOutput(ref queryKeyPointerRefAsKeyRef, ref input, ref value, ref output, logicalAddress);
             }
 
-            private void StoreOutput(ref TPSFKey key, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long address)
+            private void CopyInMemoryDataToOutput(ref TPSFKey queryKeyPointerRefAsKeyRef, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long logicalAddress)
             {
-                if (!recordAccessor.IsLogAddress(address))
+                output.RecordId = value;
+                output.Tombstone = this.recordAccessor.IsTombstone(logicalAddress);
+
+                ref KeyPointer<TPSFKey> storedKeyPointer = ref this.keyAccessor.GetKeyPointerRefFromLogicalAddress(logicalAddress);
+
+#if DEBUG
+                ref KeyPointer<TPSFKey> queryKeyPointer = ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef);
+                Debug.Assert(queryKeyPointer.PsfOrdinal == input.PsfOrdinal, "Mismatched query and input PSF ordinal");
+                Debug.Assert(storedKeyPointer.PsfOrdinal == input.PsfOrdinal, "Mismatched stored and input PSF ordinal");
+#endif
+                output.PreviousAddress = storedKeyPointer.PreviousAddress;
+            }
+
+            public unsafe void SingleReader(ref TPSFKey queryKeyPointerRefAsKeyRef, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long logicalAddress)
+            {
+                if (!recordAccessor.IsLogAddress(logicalAddress))
                 {
-                    // This is a ReadCache record. Note: ReadCompletionCallback won't be called, so no need to flag it in Output.
+                    // This is a ReadCache record. Note if we do support ReadCache in PSF secondary KVs: ReadCompletionCallback won't be called, so no need to flag it in Output.
+                    Debug.Fail("ReadCache is not supported in PSF secondary KVs");
                     return;
                 }
 
+                if (this.recordAccessor.IsInMemory(logicalAddress))
+                {
+                    CopyInMemoryDataToOutput(ref queryKeyPointerRefAsKeyRef, ref input, ref value, ref output, logicalAddress);
+                    return;
+                }
+
+                // This record is not in memory, which means we're being called from InternalCompletePendingRead. We can't dereference logicalAddress,
+                // but KeyAccessor can help us navigate to the query key.
+
+
                 output.RecordId = value;
-                if (this.recordAccessor.IsInMemory(address))
-                    output.Tombstone = this.recordAccessor.IsTombstone(address);
-
-                ref CompositeKey<TPSFKey> compositeKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref key);
-                ref KeyPointer<TPSFKey> keyPointer = ref this.keyAccessor.GetKeyPointerRef(ref compositeKey, input.PsfOrdinal);
-                Debug.Assert(keyPointer.PsfOrdinal == input.PsfOrdinal, "Visit found mismatched PSF ordinal");
-                output.PreviousLogicalAddress = keyPointer.PreviousAddress;
-            }
-
-            public unsafe void SingleReader(ref TPSFKey key, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long address)
-            {
-                // Note: if !this.recordAccessor.IsInMemory(address), we'll get the RecordInfo in ReadCompletionCallback and set tombstone there.
-                StoreOutput(ref key, ref input, ref value, ref output, address);
             }
 
             public void ReadCompletionCallback(ref TPSFKey _, ref PSFInput input, ref PSFOutput output, PSFContext ctx, Status status, RecordInfo recordInfo)
@@ -97,10 +110,10 @@ namespace PSF.Index
             public void CopyUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId oldValue, ref TRecordId newValue, long oldAddress, long newAddress)
                 => throw new PSFInternalErrorException(NotUsedForPSF);
 
-            public void InitialUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId value, long address)
+            public void InitialUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId value, long logicalAddress)
                 => throw new PSFInternalErrorException(NotUsedForPSF);
 
-            public bool InPlaceUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId value, long address)
+            public bool InPlaceUpdater(ref TPSFKey _, ref PSFInput input, ref TRecordId value, long logicalAddress)
                 => throw new PSFInternalErrorException(NotUsedForPSF);
 
             public void RMWCompletionCallback(ref TPSFKey _, ref PSFInput input, PSFContext ctx, Status status)

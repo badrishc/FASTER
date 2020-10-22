@@ -2,19 +2,19 @@
 // Licensed under the MIT license.
 
 using FASTER.core;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace PSF.Index
 {
     internal static class SessionExtensions
     {
-
-        internal static Status PsfRead<Key, Value, Input, Output, Context, Functions>(this ClientSession<Key, Value, Input, Output, Context, Functions> session,
+        internal static Status PsfRead<Key, Value, Input, Output, Context, Functions>(this AdvancedClientSession<Key, Value, Input, Output, Context, Functions> session,
                                     PSFSecondaryFasterKV<Key, Value> fkv, ref Key key,
                                     ref Input input, ref Output output, long startAddress, ref Context context, long serialNo)
             where Key : struct
             where Value : struct
-            where Functions : IFunctions<Key, Value, Input, Output, Context>
+            where Functions : IAdvancedFunctions<Key, Value, Input, Output, Context>
         {
             if (session.SupportAsync) session.UnsafeResumeThread();
             try
@@ -27,21 +27,23 @@ namespace PSF.Index
             }
         }
 
-        internal static ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context, Functions>> PsfReadAsync<Key, Value, Input, Output, Context, Functions>(
-                                    this ClientSession<Key, Value, Input, Output, Context, Functions> session,
-                                    PSFSecondaryFasterKV<Key, Value> fkv, ref Key key, ref Input input, ref Output output, long startAddress,
+        internal static ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> PsfReadAsync<Key, Value, Input, Output, Context, Functions>(
+                                    this AdvancedClientSession<Key, Value, Input, Output, Context, Functions> session,
+                                    PSFSecondaryFasterKV<Key, Value> fkv, ref Key key, ref Input input, long startAddress,
                                     ref Context context, long serialNo, PSFQuerySettings querySettings)
             where Key : struct
             where Value : struct
-            where Functions : IFunctions<Key, Value, Input, Output, Context> 
-            => fkv.ContextPsfReadAsync(session, ref key, ref input, startAddress, ref context, serialNo, querySettings);
+            where Functions : IAdvancedFunctions<Key, Value, Input, Output, Context>
+        {
+            return fkv.ContextPsfReadAsync(session.FasterSession, session.ctx, ref key, ref input, startAddress, ref context, serialNo, querySettings);
+        }
 
-        internal static Status PsfInsert<Key, Value, Input, Output, Context, Functions>(this ClientSession<Key, Value, Input, Output, Context, Functions> session,
+        internal static Status PsfInsert<Key, Value, Input, Output, Context, Functions>(this AdvancedClientSession<Key, Value, Input, Output, Context, Functions> session,
                                     PSFSecondaryFasterKV<Key, Value> fkv,
                                     ref Key key, ref Value value, ref Input input, ref Context context, long serialNo)
             where Key : struct
             where Value : struct
-            where Functions : IFunctions<Key, Value, Input, Output, Context>
+            where Functions : IAdvancedFunctions<Key, Value, Input, Output, Context>
         {
             // Called on the secondary FasterKV
             if (session.SupportAsync) session.UnsafeResumeThread();
@@ -55,12 +57,12 @@ namespace PSF.Index
             }
         }
 
-        internal static Status PsfUpdate<Key, Value, Input, Output, Context, Functions, TProviderData>(this ClientSession<Key, Value, Input, Output, Context, Functions> session,
+        internal static Status PsfUpdate<Key, Value, Input, Output, Context, Functions, TProviderData>(this AdvancedClientSession<Key, Value, Input, Output, Context, Functions> session,
                                     PSFSecondaryFasterKV<Key, Value> fkv, ref GroupCompositeKeyPair groupKeysPair, ref Value value, ref Input input,
                                     ref Context context, long serialNo, PSFChangeTracker<TProviderData, Value> changeTracker)
             where Key : struct
             where Value : struct
-            where Functions : IFunctions<Key, Value, Input, Output, Context>
+            where Functions : IAdvancedFunctions<Key, Value, Input, Output, Context>
         {
             if (session.SupportAsync) session.UnsafeResumeThread();
             try
@@ -73,11 +75,11 @@ namespace PSF.Index
             }
         }
 
-        internal static Status PsfDelete<Key, Value, Input, Output, Context, Functions>(this ClientSession<Key, Value, Input, Output, Context, Functions> session,
+        internal static Status PsfDelete<Key, Value, Input, Output, Context, Functions>(this AdvancedClientSession<Key, Value, Input, Output, Context, Functions> session,
                                     PSFSecondaryFasterKV<Key, Value> fkv, ref Key key, ref Value value, ref Input input, ref Context context, long serialNo)
             where Key : struct
             where Value : struct
-            where Functions : IFunctions<Key, Value, Input, Output, Context>
+            where Functions : IAdvancedFunctions<Key, Value, Input, Output, Context>
         {
             if (session.SupportAsync) session.UnsafeResumeThread();
             try

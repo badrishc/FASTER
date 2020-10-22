@@ -1,6 +1,5 @@
-﻿using Microsoft.Win32;
-using System;
-using System.Collections.Generic;
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license.
 
 namespace FASTER.core
 {
@@ -22,8 +21,7 @@ namespace FASTER.core
         /// <param name="output"></param>
         /// <param name="ctx"></param>
         /// <param name="status"></param>
-        /// <param name="recordInfo"></param>
-        void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo);
+        void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Context ctx, Status status);
 
         /// <summary>
         /// Upsert completion
@@ -62,8 +60,7 @@ namespace FASTER.core
         /// <param name="key">The key for this record</param>
         /// <param name="input">The user input to be used for computing the updated <paramref name="value"/></param>
         /// <param name="value">The destination to be updated; because this is an insert, there is no previous value there.</param>
-        /// <param name="address">The logical address of the record being copied to; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        void InitialUpdater(ref Key key, ref Input input, ref Value value, long address);
+        void InitialUpdater(ref Key key, ref Input input, ref Value value);
 
         /// <summary>
         /// Whether we need to invoke copy-update for RMW
@@ -84,9 +81,7 @@ namespace FASTER.core
         /// <param name="input">The user input to be used for computing <paramref name="newValue"/> from <paramref name="oldValue"/></param>
         /// <param name="oldValue">The previous value to be copied/updated</param>
         /// <param name="newValue">The destination to be updated; because this is an copy to a new location, there is no previous value there.</param>
-        /// <param name="oldAddress">The logical address of the record being copied from; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        /// <param name="newAddress">The logical address of the record being copied to; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldAddress, long newAddress);
+        void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue);
 
         /// <summary>
         /// In-place update for RMW
@@ -94,8 +89,7 @@ namespace FASTER.core
         /// <param name="key">The key for this record</param>
         /// <param name="input">The user input to be used for computing the updated <paramref name="value"/></param>
         /// <param name="value">The destination to be updated; because this is an in-place update, there is a previous value there.</param>
-        /// <param name="address">The logical address of the record being copied to; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long address);
+        bool InPlaceUpdater(ref Key key, ref Input input, ref Value value);
 
         /// <summary>
         /// Non-concurrent reader. 
@@ -104,10 +98,7 @@ namespace FASTER.core
         /// <param name="input">The user input for computing <paramref name="dst"/> from <paramref name="value"/></param>
         /// <param name="value">The value for the record being read</param>
         /// <param name="dst">The location where <paramref name="value"/> is to be copied</param>
-        /// <param name="address">The logical address of the record being read from; can be used as a RecordId by indexing and for liveness checking. Note that this address may
-        ///     be in the immutable region, or may not be in memory because this method is called for a read that has gone pending. Use <see cref="RecordAccessor{Key, Value}.IsInMemory(long)"/>
-        ///     to test before dereferencing.</param>
-        void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst, long address);
+        void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst);
 
         /// <summary>
         /// Conncurrent reader
@@ -116,8 +107,7 @@ namespace FASTER.core
         /// <param name="input">The user input for computing <paramref name="dst"/> from <paramref name="value"/></param>
         /// <param name="value">The value for the record being read</param>
         /// <param name="dst">The location where <paramref name="value"/> is to be copied</param>
-        /// <param name="address">The logical address of the record being copied to; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst, long address);
+        void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst);
 
         /// <summary>
         /// Non-concurrent writer; called on Upsert that does not find the key so does an insert or finds the key in the immutable region so does a read/copy/update (RCU),
@@ -126,8 +116,7 @@ namespace FASTER.core
         /// <param name="key">The key for this record</param>
         /// <param name="oldValue">The previous value to be copied/updated</param>
         /// <param name="newValue">The destination to be updated; because this is an copy to a new location, there is no previous value there.</param>
-        /// <param name="address">The logical address of the record being copied to; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        void SingleWriter(ref Key key, ref Value oldValue, ref Value newValue, long address);
+        void SingleWriter(ref Key key, ref Value oldValue, ref Value newValue);
 
         /// <summary>
         /// Concurrent writer
@@ -135,8 +124,7 @@ namespace FASTER.core
         /// <param name="key">The key for the record to be written</param>
         /// <param name="src">The value to be copied to <paramref name="dst"/></param>
         /// <param name="dst">The location where <paramref name="src"/> is to be copied; because this method is called only for in-place updates, there is a previous value there.</param>
-        /// <param name="address">The logical address of the record being copied to; can be used as a RecordId by indexing or passed to <see cref="RecordAccessor{Key, Value}"/></param>
-        bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long address);
+        bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst);
     }
 
     /// <summary>

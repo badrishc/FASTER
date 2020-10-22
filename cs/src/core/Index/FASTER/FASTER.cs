@@ -144,6 +144,26 @@ namespace FASTER.core
 
             if (Utility.IsBlittable<Key>() && Utility.IsBlittable<Value>())
             {
+                var sbl = new SpanByteLength();
+
+                if (typeof(Key) == typeof(SpanByte))
+                {
+                    if (variableLengthStructSettings == null)
+                        variableLengthStructSettings = new VariableLengthStructSettings<SpanByte, SpanByte>() as VariableLengthStructSettings<Key, Value>;
+
+                    if (variableLengthStructSettings.keyLength == null)
+                        (variableLengthStructSettings as VariableLengthStructSettings<SpanByte, Value>).keyLength = sbl;
+                }
+
+                if (typeof(Value) == typeof(SpanByte))
+                {
+                    if (variableLengthStructSettings == null)
+                        variableLengthStructSettings = new VariableLengthStructSettings<SpanByte, SpanByte>() as VariableLengthStructSettings<Key, Value>;
+
+                    if (variableLengthStructSettings.valueLength == null)
+                        (variableLengthStructSettings as VariableLengthStructSettings<Key, SpanByte>).valueLength = sbl;
+                }
+
                 if (variableLengthStructSettings != null)
                 {
                     hlog = new VariableLengthBlittableAllocator<Key, Value>(logSettings, variableLengthStructSettings,
@@ -475,12 +495,12 @@ namespace FASTER.core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Status ContextRead<Input, Output, Context, FasterSession>(ref Key key, ref Input input, ref Output output, long startAddress, out RecordInfo recordInfo, Context context, FasterSession fasterSession, long serialNo,
+        internal Status ContextRead<Input, Output, Context, FasterSession>(ref Key key, ref Input input, ref Output output, ref RecordInfo recordInfo, Context context, FasterSession fasterSession, long serialNo,
             FasterExecutionContext<Input, Output, Context> sessionCtx)
             where FasterSession : IFasterSession<Key, Value, Input, Output, Context>
         {
             var pcontext = default(PendingContext<Input, Output, Context>);
-            var internalStatus = InternalRead(ref key, ref input, ref output, startAddress, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
+            var internalStatus = InternalRead(ref key, ref input, ref output, recordInfo.PreviousAddress, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
             Debug.Assert(internalStatus != OperationStatus.RETRY_NOW);
 
             Status status;
@@ -492,6 +512,32 @@ namespace FASTER.core
             else
             {
                 recordInfo = default;
+                status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, false, out _);
+            }
+
+            Debug.Assert(serialNo >= sessionCtx.serialNum, "Operation serial numbers must be non-decreasing");
+            sessionCtx.serialNum = serialNo;
+            return status;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal Status ContextReadAtAddress<Input, Output, Context, FasterSession>(long address, ref Input input, ref Output output, Context context, FasterSession fasterSession, long serialNo,
+            FasterExecutionContext<Input, Output, Context> sessionCtx)
+            where FasterSession : IFasterSession<Key, Value, Input, Output, Context>
+        {
+            var pcontext = default(PendingContext<Input, Output, Context>);
+            pcontext.skipKeyVerification = true;
+            Key key = default;
+            var internalStatus = InternalRead(ref key, ref input, ref output, address, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
+            Debug.Assert(internalStatus != OperationStatus.RETRY_NOW);
+
+            Status status;
+            if (internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND)
+            {
+                status = (Status)internalStatus;
+            }
+            else
+            {
                 status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, false, out _);
             }
 

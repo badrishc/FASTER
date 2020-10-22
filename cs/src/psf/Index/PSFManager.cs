@@ -261,7 +261,7 @@ namespace PSF.Index
                 throw new PSFArgumentException("PSFRegistrationSettings.CheckpointSettings is required");
 
             // TODOdcr: Support ReadCache and CopyReadsToTail for PSFs
-            if (!(registrationSettings.LogSettings.ReadCacheSettings is null) || registrationSettings.LogSettings.CopyReadsToTail)
+            if (registrationSettings.LogSettings.ReadCacheSettings is {} || registrationSettings.LogSettings.CopyReadsToTail)
                 throw new PSFArgumentException("PSFs do not support ReadCache or CopyReadsToTail");
         }
 

@@ -22,24 +22,24 @@ namespace FasterPSFSample
         public class Functions : IFunctions<Key, BlittableOrders, Input<BlittableOrders>, Output<BlittableOrders>, Context<BlittableOrders>>
         {
             #region Read
-            public void ConcurrentReader(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, ref Output<BlittableOrders> dst, long logAddress)
+            public void ConcurrentReader(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, ref Output<BlittableOrders> dst)
                 => dst.Value = value;
 
-            public void SingleReader(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, ref Output<BlittableOrders> dst, long logAddress)
+            public void SingleReader(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, ref Output<BlittableOrders> dst)
                 => dst.Value = value;
 
-            public void ReadCompletionCallback(ref Key key, ref Input<BlittableOrders> input, ref Output<BlittableOrders> output, Context<BlittableOrders> context, Status status, RecordInfo recordInfo)
+            public void ReadCompletionCallback(ref Key key, ref Input<BlittableOrders> input, ref Output<BlittableOrders> output, Context<BlittableOrders> context, Status status)
             { /* Output is not set by pending operations */ }
             #endregion Read
 
             #region Upsert
-            public bool ConcurrentWriter(ref Key key, ref BlittableOrders src, ref BlittableOrders dst, long logAddress)
+            public bool ConcurrentWriter(ref Key key, ref BlittableOrders src, ref BlittableOrders dst)
             {
                 dst = src;
                 return true;
             }
 
-            public void SingleWriter(ref Key key, ref BlittableOrders src, ref BlittableOrders dst, long logAddress)
+            public void SingleWriter(ref Key key, ref BlittableOrders src, ref BlittableOrders dst)
                 => dst = src;
 
             public void UpsertCompletionCallback(ref Key key, ref BlittableOrders value, Context<BlittableOrders> context)
@@ -49,13 +49,13 @@ namespace FasterPSFSample
             #region RMW
             public bool NeedCopyUpdate(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value) => true;
 
-            public void CopyUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders oldValue, ref BlittableOrders newValue, long oldLogAddress, long newLogAddress)
+            public void CopyUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders oldValue, ref BlittableOrders newValue)
                 => throw new NotImplementedException();
 
-            public void InitialUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, long logAddress)
+            public void InitialUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value)
                 => value = input.InitialUpdateValue;
 
-            public bool InPlaceUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, long logAddress)
+            public bool InPlaceUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value)
             {
                 value.ColorArgb = input.IPUColorInt;
                 return true;

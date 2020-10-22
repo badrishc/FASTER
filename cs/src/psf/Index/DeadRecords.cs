@@ -40,7 +40,7 @@ namespace PSF.Index
 
         internal void Remove(TRecordId recordId)
         {
-            if (!(this.deadRecs is null))
+            if (this.deadRecs is {})
                 this.deadRecs.Remove(recordId);
         }
     }

@@ -3,6 +3,7 @@
 
 using FASTER.core;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace PSF.Index
 {
@@ -103,5 +104,29 @@ namespace PSF.Index
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal unsafe static ref KeyPointer<TPSFKey> CastFromKeyRef(ref TPSFKey keyRef)
             => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)Unsafe.AsPointer(ref keyRef));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static unsafe ref KeyPointer<TPSFKey> CastFromPhysicalAddress(long physicalAddress)
+            => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)physicalAddress);
+
+        public override string ToString()
+        {
+            var separator = "";
+            var flagStrBuilder = new StringBuilder();
+            void appendFlag(bool pred, string name)
+            {
+                if (pred)
+                {
+                    flagStrBuilder.Append(separator).Append(name);
+                    separator = "|";
+                }
+            }
+            appendFlag(this.IsNull, nameof(this.IsNull));
+            appendFlag(this.IsOutOfLineKey, nameof(this.IsOutOfLineKey));
+            appendFlag(this.IsUnlinkOld, nameof(this.IsUnlinkOld));
+            appendFlag(this.IsLinkNew, nameof(this.IsLinkNew));
+
+            return $"Key: {this.Key}, psfOrd {this.psfOrdinal}, prevAddr {this.PreviousAddress}, ofsStartKeys {this.offsetToStartOfKeys}, flags {flagStrBuilder}";
+        }
     }
 }

@@ -16,7 +16,7 @@ namespace PSF.Index
             {
                 case OperationType.READ:
                     internalStatus = this.PsfInternalRead(ref pendingContext.key.Get(),
-                                         ref pendingContext.input,
+                                         ref pendingContext.input.Get(),
                                          ref pendingContext.output,
                                          pendingContext.recordInfo.PreviousAddress,
                                          ref pendingContext.userContext,
@@ -25,7 +25,7 @@ namespace PSF.Index
                 case OperationType.INSERT:
                     internalStatus = this.PsfInternalInsert(ref pendingContext.key.Get(),
                                          ref pendingContext.value.Get(),
-                                         ref pendingContext.input,
+                                         ref pendingContext.input.Get(),
                                          ref pendingContext.userContext,
                                          ref pendingContext, fasterSession, currentCtx, pendingContext.serialNum);
                     // If this assert fires, we'll have to virtualize the retry and callback switches in InternalCompleteRetryRequest.

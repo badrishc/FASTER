@@ -10,7 +10,6 @@ using FASTER.core;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -43,16 +42,20 @@ namespace FASTER.benchmark
         const int kPeriodicCheckpointMilliseconds = 0;
 #endif
 
-        // *** Use below settings to backup and recover database for fast benchmark repeat runs
-        // First set kBackupStoreForFastRestarts to get the backup
-        // Then reset kBackupStoreForFastRestarts and set kRestoreFromBackupForFastRestarts for fast subsequent runs
+        // *** Use these to backup and recover database for fast benchmark repeat runs
+        // Use BackupMode.Backup to create the backup, unless it was recovered during BackupMode.Recover
+        // Use BackupMode.Restore for fast subsequent runs
         // Does NOT work when periodic checkpointing is turned on
-        const bool kBackupStoreForFastRestarts = false;
-        const bool kRestoreFromBackupForFastRestarts = false;
+        readonly BackupMode backupMode;
         // ***
 
-        const long kInitCount = kUseSmallData ? 2500480 : 250000000;
-        const long kTxnCount = kUseSmallData ? 10000000 : 1000000000;
+        const long kInitCount_ = kUseSmallData ? 2500480 : 250000000;
+        const long kTxnCount_ = kUseSmallData ? 10000000 : 1000000000;
+
+        // Ensure sizes are aligned to chunk sizes
+        const long kInitCount = kChunkSize * (kInitCount_ / kChunkSize);
+        const long kTxnCount = kChunkSize * (kTxnCount_ / kChunkSize);
+
         const int kMaxKey = kUseSmallData ? 1 << 22 : 1 << 28;
 
         const int kFileChunkSize = 4096;
@@ -79,12 +82,13 @@ namespace FASTER.benchmark
 
         volatile bool done = false;
 
-        public FASTER_YcsbBenchmark(int threadCount_, int numaStyle_, string distribution_, int readPercent_)
+        public FASTER_YcsbBenchmark(int threadCount_, int numaStyle_, string distribution_, int readPercent_, int backupOptions_)
         {
             threadCount = threadCount_;
             numaStyle = numaStyle_;
             distribution = distribution_;
             readPercent = readPercent_;
+            this.backupMode = (BackupMode)backupOptions_;
 
 #if DASHBOARD
             statsWritten = new AutoResetEvent[threadCount];
@@ -226,7 +230,7 @@ namespace FASTER.benchmark
 
         public unsafe void Run()
         {
-            // Native32.AffinitizeThreadShardedNuma((uint)0, 2);
+            //Native32.AffinitizeThreadShardedNuma(0, 2);
 
             RandomGenerator rng = new RandomGenerator();
 
@@ -246,15 +250,26 @@ namespace FASTER.benchmark
             Console.WriteLine("Executing setup.");
 
             Stopwatch sw = new Stopwatch();
-            if (kRestoreFromBackupForFastRestarts && kPeriodicCheckpointMilliseconds <= 0)
+            var storeWasRecovered = false;
+            if (this.backupMode.HasFlag(BackupMode.Restore) && kPeriodicCheckpointMilliseconds <= 0)
             {
+                Console.WriteLine("Recovering store for fast restart");
                 sw.Start();
-                store.Recover();
+                try
+                {
+                    Console.WriteLine("Recovering FasterKV for fast restart");
+                    store.Recover();
+                    storeWasRecovered = true;
+                } catch (Exception)
+                {
+                    Console.WriteLine("Unable to recover prior store");
+                }
                 sw.Stop();
             }
-            else
+            if (!storeWasRecovered)
             {
                 // Setup the store for the YCSB benchmark.
+                Console.WriteLine("Loading FasterKV from data");
                 for (int idx = 0; idx < threadCount; ++idx)
                 {
                     int x = idx;
@@ -278,8 +293,9 @@ namespace FASTER.benchmark
             long startTailAddress = store.Log.TailAddress;
             Console.WriteLine("Start tail address = " + startTailAddress);
 
-            if (kBackupStoreForFastRestarts && kPeriodicCheckpointMilliseconds <= 0)
+            if (!storeWasRecovered && this.backupMode.HasFlag(BackupMode.Backukp) && kPeriodicCheckpointMilliseconds <= 0)
             {
+                Console.WriteLine("Checkpointing FasterKV for fast restart");
                 store.TakeFullCheckpoint(out _);
                 store.CompleteCheckpointAsync().GetAwaiter().GetResult();
                 Console.WriteLine("Completed checkpoint");
@@ -506,6 +522,8 @@ namespace FASTER.benchmark
                     {
                         init_keys_[count].value = *(long*)(chunk_ptr + idx);
                         ++count;
+                        if (count == kInitCount)
+                            break;
                     }
                     if (size == kFileChunkSize)
                         offset += kFileChunkSize;
@@ -546,6 +564,8 @@ namespace FASTER.benchmark
                     {
                         txn_keys_[count].value = *(long*)(chunk_ptr + idx);
                         ++count;
+                        if (count == kTxnCount)
+                            break;
                     }
                     if (size == kFileChunkSize)
                         offset += kFileChunkSize;

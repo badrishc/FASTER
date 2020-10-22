@@ -34,40 +34,40 @@ namespace PSF.Index
             return status;
         }
 
-        internal ValueTask<ReadAsyncResult<TInput, TOutput, TContext, TFunctions>> ContextPsfReadAsync<TInput, TOutput, TContext, TFunctions>(
-                                        ClientSession<TPSFKey, TRecordId, TInput, TOutput, TContext, TFunctions> clientSession,
+        internal ValueTask<ReadAsyncResult<TInput, TOutput, TContext>> ContextPsfReadAsync<TInput, TOutput, TContext, FasterSession>(
+                                        FasterSession fasterSession, FasterExecutionContext<TInput, TOutput, TContext> sessionCtx,
                                         ref TPSFKey key, ref TInput input, long startAddress, ref TContext context, long serialNo, PSFQuerySettings querySettings)
-            where TFunctions : IFunctions<TPSFKey, TRecordId, TInput, TOutput, TContext>
+            where FasterSession : IFasterSession<TPSFKey, TRecordId, TInput, TOutput, TContext>
         {
             var pcontext = default(PendingContext<TInput, TOutput, TContext>);
             var diskRequest = default(AsyncIOContext<TPSFKey, TRecordId>);
             var output = default(TOutput);
 
-            if (clientSession.SupportAsync) clientSession.UnsafeResumeThread();
+            fasterSession.UnsafeResumeThread();
             try
             {
-                var internalStatus = this.PsfInternalRead(ref key, ref input, ref output, startAddress, ref context, ref pcontext, clientSession.FasterSession, clientSession.ctx, serialNo);
+                var internalStatus = this.PsfInternalRead(ref key, ref input, ref output, startAddress, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
                 if (internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND)
                 {
-                    return new ValueTask<ReadAsyncResult<TInput, TOutput, TContext, TFunctions>>(new ReadAsyncResult<TInput, TOutput, TContext, TFunctions>((Status)internalStatus, output, pcontext.recordInfo));
+                    return new ValueTask<ReadAsyncResult<TInput, TOutput, TContext>>(new ReadAsyncResult<TInput, TOutput, TContext>((Status)internalStatus, output, pcontext.recordInfo));
                 }
 
                 else
                 {
-                    var status = HandleOperationStatus(clientSession.ctx, clientSession.ctx, ref pcontext, clientSession.FasterSession, internalStatus, true, out diskRequest);
+                    var status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, true, out diskRequest);
 
                     if (status != Status.PENDING)
-                        return new ValueTask<ReadAsyncResult<TInput, TOutput, TContext, TFunctions>>(new ReadAsyncResult<TInput, TOutput, TContext, TFunctions>(status, output, pcontext.recordInfo));
+                        return new ValueTask<ReadAsyncResult<TInput, TOutput, TContext>>(new ReadAsyncResult<TInput, TOutput, TContext>(status, output, pcontext.recordInfo));
                 }
             }
             finally
             {
-                Debug.Assert(serialNo >= clientSession.ctx.serialNum, "Operation serial numbers must be non-decreasing");
-                clientSession.ctx.serialNum = serialNo;
-                if (clientSession.SupportAsync) clientSession.UnsafeSuspendThread();
+                Debug.Assert(serialNo >= sessionCtx.serialNum, "Operation serial numbers must be non-decreasing");
+                sessionCtx.serialNum = serialNo;
+                fasterSession.UnsafeSuspendThread();
             }
 
-            return SlowReadAsync(this, clientSession, pcontext, diskRequest, querySettings.CancellationToken);
+            return SlowReadAsync(this, fasterSession, sessionCtx, pcontext, diskRequest, querySettings.CancellationToken);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

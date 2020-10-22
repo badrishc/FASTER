@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using FASTER.core;
+using System;
 using System.Runtime.CompilerServices;
 
 namespace PSF.Index
@@ -69,6 +70,10 @@ namespace PSF.Index
             public int GetInitialLength() => this.size;
 
             public int GetLength(ref TPSFKey _) => this.size;
+
+            public unsafe void Serialize(ref TPSFKey source, void* destination)
+                => Buffer.MemoryCopy(Unsafe.AsPointer(ref source), destination, GetLength(ref source), GetLength(ref source))
+            ;
         }
 
         /// <summary>

@@ -34,7 +34,7 @@ namespace PSF.Index
                 this.IsDelete = false;
             }
 
-            internal void SetQueryKey(SectorAlignedBufferPool pool, KeyAccessor<TPSFKey> keyAccessor, ref TPSFKey key)
+            internal void SetQueryKey(SectorAlignedBufferPool pool, KeyAccessor<TPSFKey, TRecordId> keyAccessor, ref TPSFKey key)
             {
                 // Create a varlen CompositeKey with just one item. This is ONLY used as the query key to QueryPSF.
                 this.keyPointerMem = pool.Get(keyAccessor.KeyPointerSize);
@@ -64,12 +64,15 @@ namespace PSF.Index
 
             public void Dispose()
             {
-                if (!(this.keyPointerMem is null))
+                if (this.keyPointerMem is {})
                 {
                     this.keyPointerMem.Return();
                     this.keyPointerMem = null;
                 }
             }
+
+            public override string ToString() 
+                => $"qKey {this.QueryKeyRef}, groupId {this.GroupId}, psfOrd {this.PsfOrdinal}, isDel {this.IsDelete}";
         }
     }
 }

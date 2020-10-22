@@ -17,7 +17,7 @@ namespace FASTER.benchmark
         {
         }
 
-        public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Empty ctx, Status status, RecordInfo recordInfo)
+        public void ReadCompletionCallback(ref Key key, ref Input input, ref Output output, Empty ctx, Status status)
         {
         }
 
@@ -36,26 +36,26 @@ namespace FASTER.benchmark
 
         // Read functions
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logAddress)
+        public void SingleReader(ref Key key, ref Input input, ref Value value, ref Output dst)
         {
             dst.value = value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst, long logAddress)
+        public void ConcurrentReader(ref Key key, ref Input input, ref Value value, ref Output dst)
         {
             dst.value = value;
         }
 
         // Upsert functions
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SingleWriter(ref Key key, ref Value src, ref Value dst, long logAddress)
+        public void SingleWriter(ref Key key, ref Value src, ref Value dst)
         {
             dst = src;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst, long logAddress)
+        public bool ConcurrentWriter(ref Key key, ref Value src, ref Value dst)
         {
             dst = src;
             return true;
@@ -63,13 +63,13 @@ namespace FASTER.benchmark
 
         // RMW functions
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void InitialUpdater(ref Key key, ref Input input, ref Value value, long logAddress)
+        public void InitialUpdater(ref Key key, ref Input input, ref Value value)
         {
             value.value = input.value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value, long logAddress)
+        public bool InPlaceUpdater(ref Key key, ref Input input, ref Value value)
         {
             value.value += input.value;
             return true;
@@ -79,7 +79,7 @@ namespace FASTER.benchmark
         public bool NeedCopyUpdate(ref Key key, ref Input input, ref Value value) => true;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue, long oldLogAddress, long newLogAddress)
+        public void CopyUpdater(ref Key key, ref Input input, ref Value oldValue, ref Value newValue)
         {
             newValue.value = input.value + oldValue.value;
         }

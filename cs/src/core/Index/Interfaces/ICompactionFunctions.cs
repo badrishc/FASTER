@@ -36,7 +36,7 @@
         /// Copies a value from <paramref name="src"/> to <paramref name="dst"/>.
         /// It is possible that value at <paramref name="src"/> might be modified during copy operation thus to prevent torn writes
         /// this method is provided to allow the implementer to correctly handle concurrency.
-        /// This method is counterpart to <see cref="IFunctions{Key, Value, Input, Output, Context}.SingleWriter(ref Key, ref Value, ref Value, long)"/>.
+        /// This method is counterpart to <see cref="IFunctions{Key, Value, Input, Output, Context}.SingleWriter(ref Key, ref Value, ref Value)"/>.
         /// </summary>
         /// <param name="src">Managed pointer to value at source</param>
         /// <param name="dst">Managed pointer to uninitialized value at destination</param>
@@ -48,13 +48,13 @@
         /// Copies a value from <paramref name="src"/> to <paramref name="dst"/>.
         /// It is possible that value at <paramref name="src"/> might be modified during copy operation thus to prevent torn writes
         /// this method is provided to allow the implementer to correctly handle concurrency.
-        /// This method is counterpart to <see cref="IFunctions{Key, Value, Input, Output, Context}.ConcurrentWriter(ref Key, ref Value, ref Value, long)"/>.
+        /// This method is counterpart to <see cref="IFunctions{Key, Value, Input, Output, Context}.ConcurrentWriter(ref Key, ref Value, ref Value)"/>.
         /// </summary>
         /// <param name="src">Managed pointer to value at source</param>
         /// <param name="dst">Managed pointer to existing value at destination</param>
         /// <param name="valueLength">[Can be null] Variable length struct functions</param>
         /// <returns>
-        /// True - if <paramref name="src"/> can be safely copied to <paramref name="dst"/> (see <see cref="IFunctions{Key, Value, Input, Output, Context}.ConcurrentWriter(ref Key, ref Value, ref Value, long)"/>).
+        /// True - if <paramref name="src"/> can be safely copied to <paramref name="dst"/> (see <see cref="IFunctions{Key, Value, Input, Output, Context}.ConcurrentWriter(ref Key, ref Value, ref Value)"/>).
         /// False - if a new record needs to be allocated. In this case <see cref="ICompactionFunctions{Key, Value}.Copy(ref Value, ref Value, IVariableLengthStruct{Value})"/> will be called with 
         /// managed pointer to new record.
         /// </returns>

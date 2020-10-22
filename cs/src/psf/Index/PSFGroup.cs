@@ -45,7 +45,7 @@ namespace PSF.Index
         private int PSFCount => this.PSFs.Length;
 
         private readonly IFasterEqualityComparer<TPSFKey> userKeyComparer;
-        private readonly KeyAccessor<TPSFKey> keyAccessor;
+        private readonly KeyAccessor<TPSFKey, TRecordId> keyAccessor;
 
         private readonly SectorAlignedBufferPool bufferPool;
 
@@ -58,7 +58,7 @@ namespace PSF.Index
         public override bool Equals(object obj) => this.Equals(obj as PSFGroup<TProviderData, TPSFKey, TRecordId>);
 
         /// <inheritdoc/>
-        public bool Equals(PSFGroup<TProviderData, TPSFKey, TRecordId> other) => !(other is null) && this.Id == other.Id;
+        public bool Equals(PSFGroup<TProviderData, TPSFKey, TRecordId> other) => other is {} && this.Id == other.Id;
 
         /// <summary>
         /// Constructor
@@ -75,7 +75,7 @@ namespace PSF.Index
             this.userKeyComparer = GetUserKeyComparer();
 
             this.PSFs = defs.Select((def, ord) => new PSF<TPSFKey, TRecordId>(this.Id, ord, def.Name, this)).ToArray();
-            this.keyAccessor = new KeyAccessor<TPSFKey>(this.userKeyComparer, this.PSFCount, this.keyPointerSize);
+            this.keyAccessor = new KeyAccessor<TPSFKey, TRecordId>(this.userKeyComparer, this.PSFCount, this.keyPointerSize);
 
             this.checkpointSettings = regSettings?.CheckpointSettings;
             this.fkv = new PSFSecondaryFasterKV<TPSFKey, TRecordId>(
@@ -87,25 +87,26 @@ namespace PSF.Index
                     }
                 );
 
+            // Now we have the log to use.
+            this.keyAccessor.SetLog(this.fkv.hlog);
             this.bufferPool = this.fkv.hlog.bufferPool;
         }
 
         /// <inheritdoc/>
         public IDisposable NewSession()
-            => this.fkv.NewSession<PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput, 
-                                   PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions>(
-                    new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions(this.keyAccessor, this.fkv.RecordAccessor), threadAffinitized: this.regSettings.ThreadAffinitized);
+            => this.fkv.For(new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions(this.keyAccessor, this.fkv.RecordAccessor))
+                       .NewSession<PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions>(threadAffinitized: this.regSettings.ThreadAffinitized);
 
-        private ClientSession<TPSFKey, TRecordId, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput,
+        private AdvancedClientSession<TPSFKey, TRecordId, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput,
                               PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions> ToFkvSession(IDisposable sessionObj)
-            => sessionObj is ClientSession<TPSFKey, TRecordId, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput, 
+            => sessionObj is AdvancedClientSession<TPSFKey, TRecordId, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFInput, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput, 
                                            PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext, PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFFunctions> session
                 ? session
-                : throw new PSFInvalidOperationException("Expected a FASTER ClientSession");
+                : throw new PSFInvalidOperationException("Expected a FASTER AdvancedClientSession");
 
         private IFasterEqualityComparer<TPSFKey> GetUserKeyComparer()
         {
-            if (!(this.regSettings.KeyComparer is null))
+            if (this.regSettings.KeyComparer is {})
                 return this.regSettings.KeyComparer;
             if (typeof(IFasterEqualityComparer<TPSFKey>).IsAssignableFrom(typeof(TPSFKey)))
                 return new TPSFKey() as IFasterEqualityComparer<TPSFKey>;
@@ -197,7 +198,7 @@ namespace PSF.Index
             var value = recordId;
 
             int groupOrdinal = -1;
-            if (!(changeTracker is null))
+            if (changeTracker is {})
             {
                 value = changeTracker.BeforeRecordId;
                 if (phase == PSFExecutePhase.PreUpdate)
@@ -388,7 +389,8 @@ namespace PSF.Index
 
                 do
                 {
-                    status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, output.PreviousLogicalAddress, ref context, session.ctx.serialNum);
+                    status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, output.PreviousAddress
+                        , ref context, session.ctx.serialNum);
                     if (status == Status.PENDING)
                         session.CompletePending(spinWait: true);
                     if (querySettings.IsCanceled)
@@ -401,7 +403,7 @@ namespace PSF.Index
                         continue;
 
                     yield return output.RecordId;
-                } while (output.PreviousLogicalAddress != Constants.kInvalidAddress);
+                } while (output.PreviousAddress != Constants.kInvalidAddress);
             }
             finally
             {
@@ -419,17 +421,16 @@ namespace PSF.Index
             // TODOperf: if there are multiple PSFs within this group we can step through in parallel and return them
             // as a single merged stream; will require multiple TPSFKeys and their indexes in queryKeyPtr. Also consider
             // having TPSFKeys[] for a single PSF walk through in parallel, so the FHT log memory access is sequential.
-            var output = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput();
             var session = this.ToFkvSession(sessionObj);
             var context = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext { Functions = session.functions };
             var deadRecs = new DeadRecords<TRecordId>();
             try
             {
                 // Because we traverse the chain, we must wait for any pending read operations to complete.
-                var readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, ref output, Constants.kInvalidAddress, ref context, session.ctx.serialNum, querySettings);
+                var readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, Constants.kInvalidAddress, ref context, session.ctx.serialNum, querySettings);
                 if (querySettings.IsCanceled)
                     yield break;
-                var (status, _) = readAsyncResult.Complete(out var recordInfo);
+                var (status, output) = readAsyncResult.Complete(out var recordInfo);
                 if (status != Status.OK)    // TODOerr: check other status
                     yield break;
 
@@ -440,10 +441,10 @@ namespace PSF.Index
 
                 do
                 {
-                    readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, ref output, recordInfo.PreviousAddress, ref context, session.ctx.serialNum, querySettings);
+                    readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, recordInfo.PreviousAddress, ref context, session.ctx.serialNum, querySettings);
                     if (querySettings.IsCanceled)
                         yield break;
-                    (status, _) = readAsyncResult.Complete(out recordInfo);
+                    (status, output) = readAsyncResult.Complete(out recordInfo);
                     if (status != Status.OK)    // TODOerr: check other status
                         yield break;
 
@@ -451,7 +452,7 @@ namespace PSF.Index
                         continue;
 
                     yield return output.RecordId;
-                } while (output.PreviousLogicalAddress != Constants.kInvalidAddress);
+                } while (output.PreviousAddress != Constants.kInvalidAddress);
             }
             finally
             {

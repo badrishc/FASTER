@@ -19,7 +19,7 @@ namespace PSF.Index
         where TPSFKey : struct
         where TRecordId : struct
     {
-        internal KeyAccessor<TPSFKey> KeyAccessor => (KeyAccessor<TPSFKey>)this.comparer;
+        internal KeyAccessor<TPSFKey, TRecordId> KeyAccessor => (KeyAccessor<TPSFKey, TRecordId>)this.comparer;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal OperationStatus PsfInternalRead<TInput, TOutput, TContext, FasterSession>(
@@ -127,22 +127,24 @@ namespace PSF.Index
             // Mutable region (even fuzzy region is included here)
             if (logicalAddress >= hlog.SafeReadOnlyAddress)
             {
-                pendingContext.recordInfo = hlog.GetInfo(physicalAddress);
+                long recordPhysicalAddress = KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                pendingContext.recordInfo = hlog.GetInfo(recordPhysicalAddress);
                 if (pendingContext.recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                fasterSession.ConcurrentReader(ref queryKeyPointerRefAsKeyRef, ref input, ref hlog.GetValue(physicalAddress), ref output, logicalAddress);
+                fasterSession.ConcurrentReader(ref queryKeyPointerRefAsKeyRef, ref input, ref hlog.GetValue(recordPhysicalAddress), ref output, logicalAddress);
                 return OperationStatus.SUCCESS;
             }
 
             // Immutable region
             else if (logicalAddress >= hlog.HeadAddress)
             {
-                pendingContext.recordInfo = hlog.GetInfo(physicalAddress);
+                long recordPhysicalAddress = KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                pendingContext.recordInfo = hlog.GetInfo(recordPhysicalAddress);
                 if (pendingContext.recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                fasterSession.SingleReader(ref queryKeyPointerRefAsKeyRef, ref input, ref hlog.GetValue(physicalAddress), ref output, logicalAddress);
+                fasterSession.SingleReader(ref queryKeyPointerRefAsKeyRef, ref input, ref hlog.GetValue(recordPhysicalAddress), ref output, logicalAddress);
                 return OperationStatus.SUCCESS;
             }
 
@@ -191,11 +193,11 @@ namespace PSF.Index
             {
                 pendingContext.type = OperationType.READ;
                 pendingContext.key = new PsfQueryKeyContainer(ref queryKeyPointerRefAsKeyRef, this.KeyAccessor, this.hlog.bufferPool);
-                pendingContext.input = input;
+                pendingContext.input = fasterSession.GetHeapContainer(ref input);
                 pendingContext.output = output;
                 pendingContext.userContext = context;
                 pendingContext.entry.word = entry.word;
-                pendingContext.logicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPhysicalAddress(physicalAddress);
+                pendingContext.logicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
                 pendingContext.version = sessionCtx.version;
                 pendingContext.serialNum = lsn;
                 pendingContext.heldLatch = heldOperation;
@@ -218,7 +220,7 @@ namespace PSF.Index
         {
             private readonly SectorAlignedMemory mem;
 
-            public unsafe PsfQueryKeyContainer(ref TPSFKey key, KeyAccessor<TPSFKey> keyAccessor, SectorAlignedBufferPool pool)
+            public unsafe PsfQueryKeyContainer(ref TPSFKey key, KeyAccessor<TPSFKey, TRecordId> keyAccessor, SectorAlignedBufferPool pool)
             {
                 var len = keyAccessor.KeyPointerSize;
                 this.mem = pool.Get(len);
@@ -301,7 +303,7 @@ namespace PSF.Index
                         // Note that we do not backtrace here because we are not replacing the value at the key; 
                         // instead, we insert at the top of the hash chain. Track the latest record version we've seen.
                         long physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
-                        var recordAddress = this.KeyAccessor.GetRecordAddressFromKeyPhysicalAddress(physicalAddress);
+                        var recordAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
                         if (hlog.GetInfo(physicalAddress).Tombstone)
                         {
                             // The chain might extend past a tombstoned record so we must include it in the chain
@@ -417,7 +419,7 @@ namespace PSF.Index
                 pendingContext.type = OperationType.INSERT;
                 pendingContext.key = hlog.GetKeyContainer(ref firstKeyPointerRefAsKeyRef);  // The Insert key has the full PsfCount of KeyPointers
                 pendingContext.value = hlog.GetValueContainer(ref value);
-                pendingContext.input = input;
+                pendingContext.input = fasterSession.GetHeapContainer(ref input);
                 pendingContext.userContext = default;
                 pendingContext.entry.word = default;
                 pendingContext.logicalAddress = Constants.kInvalidAddress;

@@ -18,7 +18,10 @@ namespace PSF.Index
 
             public bool Tombstone { get; set; }
 
-            public long PreviousLogicalAddress { get; set; }
+            public long PreviousAddress { get; set; }
+
+            public override string ToString()
+                => $"rId {this.RecordId}, tomb {this.Tombstone}, prevAddr {this.PreviousAddress}";
         }
     }
 }

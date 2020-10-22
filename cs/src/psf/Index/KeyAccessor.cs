@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using FASTER.core;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -12,9 +13,12 @@ namespace PSF.Index
     /// the Key typeparam of the secondary FasterKV.
     /// </summary>
     /// <typeparam name="TPSFKey">The type of the Key returned by a PSF function</typeparam>
-    internal unsafe class KeyAccessor<TPSFKey> : IFasterEqualityComparer<TPSFKey>
+    /// <typeparam name="TRecordId">The type of data record supplied by the data provider; in FasterKV it 
+    ///     is the logicalAddress of the record in the primary FasterKV instance.</typeparam>
+    internal unsafe class KeyAccessor<TPSFKey, TRecordId> : IFasterEqualityComparer<TPSFKey>
     {
         private readonly IFasterEqualityComparer<TPSFKey> userComparer;
+        private AllocatorBase<TPSFKey, TRecordId> hlog;
 
         internal KeyAccessor(IFasterEqualityComparer<TPSFKey> userComparer, int keyCount, int keyPointerSize)
         {
@@ -23,32 +27,46 @@ namespace PSF.Index
             this.KeyPointerSize = keyPointerSize;
         }
 
+        internal void SetLog(AllocatorBase<TPSFKey, TRecordId> hlog)
+        {
+            // Some logic here assumes we are using this allocator.
+            Debug.Assert(hlog is VariableLengthBlittableAllocator<TPSFKey, TRecordId>, "Expected allocator type not found");
+            this.hlog = hlog;
+        }
+
         public int KeyCount { get; }
 
         public int KeyPointerSize { get; }
+
+        public int TotalKeySize => KeyCount * KeyPointerSize;
 
         #region IFasterEqualityComparer implementation
 
         public long GetHashCode64(ref TPSFKey queryKeyPointerRefAsKeyRef) 
             => this.GetHashCode64(ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef));
 
-        public bool Equals(ref TPSFKey queryKeyPointerRefAsKeyRef, ref TPSFKey compositeKeyPointerRefAsKeyRef)
-            => KeysEqual(ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef), ref KeyPointer<TPSFKey>.CastFromKeyRef(ref compositeKeyPointerRefAsKeyRef));
+        public bool Equals(ref TPSFKey queryKeyPointerRefAsKeyRef, ref TPSFKey storedKeyPointerRefAsKeyRef)
+        {
+            // VarLenBlittableAllocator.GetKey() offsets by RecordInfo size.
+            long storedKeyPhysicalAddress = this.GetPhysicalAddress(ref storedKeyPointerRefAsKeyRef) - RecordInfo.GetLength();
+            ref KeyPointer<TPSFKey> storedKeyPointer = ref KeyPointer<TPSFKey>.CastFromPhysicalAddress(storedKeyPhysicalAddress);
+            return KeysEqual(ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef), ref storedKeyPointer);
+        }
 
         #endregion IFasterEqualityComparer implementation
 
         #region KeyPointer accessors
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long GetPreviousAddress(long physicalAddress)
-            => this.GetKeyPointerRef(physicalAddress).PreviousAddress;
+            => KeyPointer<TPSFKey>.CastFromPhysicalAddress(physicalAddress).PreviousAddress;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetPreviousAddress(ref CompositeKey<TPSFKey> key, int psfOrdinal, long prevAddress)
-            => this.GetKeyPointerRef(ref key, psfOrdinal).PreviousAddress = prevAddress;
+        public void SetPreviousAddress(ref CompositeKey<TPSFKey> compositeKey, int psfOrdinal, long prevAddress)
+            => this.GetKeyPointerRef(ref compositeKey, psfOrdinal).PreviousAddress = prevAddress;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void SetOffsetToStartOfKeys(ref CompositeKey<TPSFKey> key, int psfOrdinal, int offset)
-            => this.GetKeyPointerRef(ref key, psfOrdinal).OffsetToStartOfKeys = offset;
+        public void SetOffsetToStartOfKeys(ref CompositeKey<TPSFKey> compositeKey, int psfOrdinal, int offset)
+            => this.GetKeyPointerRef(ref compositeKey, psfOrdinal).OffsetToStartOfKeys = offset;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsNullAt(ref CompositeKey<TPSFKey> key, int psfOrdinal) => this.GetKeyPointerRef(ref key, psfOrdinal).IsNull;
@@ -70,13 +88,20 @@ namespace PSF.Index
             return Utility.GetHashCode(this.userComparer.GetHashCode64(ref keyPointer.Key)) ^ Utility.GetHashCode(keyPointer.PsfOrdinal + 1);
         }
 
+#if false // TODO remove these
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool EqualsAtKeyAddress(ref KeyPointer<TPSFKey> queryKeyPointer, long physicalAddress)
-            => KeysEqual(ref queryKeyPointer, ref GetKeyPointerRef(physicalAddress));
+            => KeysEqual(ref queryKeyPointer, ref KeyPointer<TPSFKey>.CastFromPhysicalAddress(physicalAddress));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool EqualsAtRecordAddress(ref KeyPointer<TPSFKey> queryKeyPointer, long physicalAddress)
             => KeysEqual(ref queryKeyPointer, ref GetKeyPointerRef(physicalAddress, queryKeyPointer.PsfOrdinal));
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal unsafe ref KeyPointer<TPSFKey> GetKeyPointerRef(long physicalAddress, int psfOrdinal)
+            => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)GetKeyAddressFromRecordPhysicalAddress(physicalAddress, psfOrdinal));
+#endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool KeysEqual(ref KeyPointer<TPSFKey> queryKeyPointer, ref KeyPointer<TPSFKey> storedKeyPointer)
@@ -87,25 +112,26 @@ namespace PSF.Index
             => ref key.GetKeyPointerRef(psfOrdinal, this.KeyPointerSize);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal unsafe ref KeyPointer<TPSFKey> GetKeyPointerRef(long physicalAddress)
-            => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)physicalAddress);
+        internal unsafe ref KeyPointer<TPSFKey> GetKeyPointerRefFromLogicalAddress(long logicalAddress)
+            => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)this.hlog.GetPhysicalAddress(logicalAddress));
+#endregion KeyPointer accessors
+
+#region Address manipulation
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal unsafe ref KeyPointer<TPSFKey> GetKeyPointerRef(long physicalAddress, int psfOrdinal)
-            => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)GetKeyAddressFromRecordPhysicalAddress(physicalAddress, psfOrdinal));
-        #endregion KeyPointer accessors
+        public long GetPhysicalAddress(ref TPSFKey keyRef)
+            => (long)(byte*)Unsafe.AsPointer(ref keyRef);
 
-        #region Address manipulation
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long GetRecordAddressFromKeyPhysicalAddress(long physicalAddress)
-            => physicalAddress - this.GetKeyPointerRef(physicalAddress).OffsetToStartOfKeys - RecordInfo.GetLength();
+        public long GetRecordAddressFromKeyPointerPhysicalAddress(long physicalAddress)
+            => physicalAddress - KeyPointer<TPSFKey>.CastFromPhysicalAddress(physicalAddress).OffsetToStartOfKeys - RecordInfo.GetLength();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long GetKeyAddressFromRecordPhysicalAddress(long physicalAddress, int psfOrdinal)
             // TODOperf: if we omit IsNull keys, then this will have to walk to the key with psfOrdinal. Fortunately it is only 
             // called during AsyncGetFromDiskCallback.
             => physicalAddress + RecordInfo.GetLength() + psfOrdinal * this.KeyPointerSize;
-        #endregion Address manipulation
+#endregion Address manipulation
 
         internal string GetString(ref CompositeKey<TPSFKey> compositeKey, int psfOrdinal = -1)
         {

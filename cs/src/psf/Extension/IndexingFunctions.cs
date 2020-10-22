@@ -10,10 +10,11 @@ using System.Collections.Generic;
 
 namespace FASTER.PSF
 {
-    internal class WrapperFunctions<TKVKey, TKVValue, Input, Output, Context> : IFunctions<TKVKey, TKVValue, Input, Output, Context>
+    internal class IndexingFunctions<TKVKey, TKVValue, Input, Output, Context, UserFunctions> : IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>
+        where UserFunctions : IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>
     {
         // Permanent
-        private readonly IFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions;
+        private readonly UserFunctions userFunctions;
         private readonly LogAccessor<TKVKey, TKVValue> logAccessor;
         private readonly RecordAccessor<TKVKey, TKVValue> recordAccessor;
         private readonly PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager;
@@ -23,9 +24,7 @@ namespace FASTER.PSF
         internal long LogicalAddress;
         internal Queue<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>> Queue = new Queue<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>>();
 
-        internal WrapperFunctions(IFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions,
-                                  LogAccessor<TKVKey, TKVValue> logAccessor,
-                                  RecordAccessor<TKVKey, TKVValue> recAcc,
+        internal IndexingFunctions(UserFunctions userFunctions, LogAccessor<TKVKey, TKVValue> logAccessor, RecordAccessor<TKVKey, TKVValue> recAcc,
                                   PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfMgr)
         {
             this.userFunctions = userFunctions;
@@ -40,7 +39,7 @@ namespace FASTER.PSF
             this.LogicalAddress = Constants.kInvalidAddress;
         }
 
-        internal bool IsSet => !(this.ChangeTracker is null) || this.LogicalAddress != Constants.kInvalidAddress;
+        internal bool IsSet => this.ChangeTracker is {} || this.LogicalAddress != Constants.kInvalidAddress;
 
         #region IFunctions implementations
         public void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
@@ -144,7 +143,7 @@ namespace FASTER.PSF
 
         private void EnqueueTracker()
         {
-            if (!(this.ChangeTracker is null))
+            if (this.ChangeTracker is {})
                 this.Queue.Enqueue(this.ChangeTracker);
             this.Clear();
         }
@@ -157,7 +156,7 @@ namespace FASTER.PSF
 
         public void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx)
         {
-            if (!(this.ChangeTracker is null))
+            if (this.ChangeTracker is {})
                 this.ChangeTracker.UpdateOp = UpdateOperation.Insert;
             this.EnqueueTracker();
             this.userFunctions.UpsertCompletionCallback(ref key, ref value, ctx);
@@ -165,7 +164,7 @@ namespace FASTER.PSF
 
         public void DeleteCompletionCallback(ref TKVKey key, Context ctx)
         {
-            if (!(this.ChangeTracker is null))
+            if (this.ChangeTracker is {})
                 this.ChangeTracker.UpdateOp = UpdateOperation.Delete;
             this.EnqueueTracker();
             this.userFunctions.DeleteCompletionCallback(ref key, ctx);
