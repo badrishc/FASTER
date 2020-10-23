@@ -362,48 +362,38 @@ namespace PSF.Index
             // TODOperf: if there are multiple PSFs within this group we can step through in parallel and return them
             // as a single merged stream; will require multiple TPSFKeys and their indexes in queryKeyPtr. Also consider
             // having TPSFKeys[] for a single PSF walk through in parallel, so the FHT log memory access is sequential.
-            var output = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput();
             var session = this.ToFkvSession(sessionObj);
             var context = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext { Functions = session.functions };
+            RecordInfo recordInfo = default;
             var deadRecs = new DeadRecords<TRecordId>();
             try
             {
-                // Because we traverse the chain, we must wait for any pending read operations to complete.
-                // TODOperf: See if there is a better solution than spinWaiting in CompletePending.
-                Status status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, Constants.kInvalidAddress, ref context, session.ctx.serialNum);
-                if (querySettings.IsCanceled)
-                    yield break;
-                if (status == Status.PENDING)
-                {
-                    // TODOperf: make a queue for sync+pending operations
-                    session.CompletePending(spinWait: true);
-                    output = context.Functions.Queue.Count > 0 ? context.Functions.Queue.Dequeue() : default;
-                }
-                if (status != Status.OK)    // TODOerr: check other status
-                    yield break;
-
-                if (output.Tombstone)
-                    deadRecs.Add(output.RecordId);
-                else
-                    yield return output.RecordId;
-
                 do
                 {
-                    status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, output.PreviousAddress
-                        , ref context, session.ctx.serialNum);
-                    if (status == Status.PENDING)
-                        session.CompletePending(spinWait: true);
+                    var output = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFOutput();
+                    Status status = session.PsfRead(this.fkv, ref input.QueryKeyRef, ref input, ref output, ref recordInfo, ref context, session.ctx.serialNum);
                     if (querySettings.IsCanceled)
                         yield break;
-                    if (status != Status.OK && status != Status.NOTFOUND)    // TODOerr: check other status
+                    if (status == Status.PENDING)
+                    {
+                        // Because we traverse the chain, we must wait for any pending read operations to complete.
+                        // TODOperf: extend the queue for multiple sync+pending operations rather than spinWaiting in CompletePending for each pending record.
+                        session.CompletePending(spinWait: true);
+                        // TODO verify the queued output
+                        output = context.Functions.Queue.Count > 0 ? context.Functions.Queue.Dequeue() : default;
+                        output = context.Output;
+                    }
+
+                    // NOTFOUND means either the key was not found, or the iteration found a deleted record (in which case it may have a good .PreviousAddress).
+                    if (status != Status.OK && status != Status.NOTFOUND)
                         yield break;
 
-                    Debug.Assert((status == Status.NOTFOUND) == output.Tombstone);
-                    if (deadRecs.IsDead(output.RecordId, output.Tombstone))
-                        continue;
+                    deadRecs.CheckIfDead(output.RecordId, recordInfo.Tombstone);
+                    if (status != Status.NOTFOUND)
+                        yield return output.RecordId;
 
-                    yield return output.RecordId;
-                } while (output.PreviousAddress != Constants.kInvalidAddress);
+                    recordInfo.PreviousAddress = output.PreviousAddress;
+                } while (recordInfo.PreviousAddress != Constants.kInvalidAddress);
             }
             finally
             {
@@ -423,36 +413,28 @@ namespace PSF.Index
             // having TPSFKeys[] for a single PSF walk through in parallel, so the FHT log memory access is sequential.
             var session = this.ToFkvSession(sessionObj);
             var context = new PSFSecondaryFasterKV<TPSFKey, TRecordId>.PSFContext { Functions = session.functions };
+            RecordInfo recordInfo = default;
             var deadRecs = new DeadRecords<TRecordId>();
             try
             {
-                // Because we traverse the chain, we must wait for any pending read operations to complete.
-                var readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, Constants.kInvalidAddress, ref context, session.ctx.serialNum, querySettings);
-                if (querySettings.IsCanceled)
-                    yield break;
-                var (status, output) = readAsyncResult.Complete(out var recordInfo);
-                if (status != Status.OK)    // TODOerr: check other status
-                    yield break;
-
-                if (output.Tombstone)
-                    deadRecs.Add(output.RecordId);
-                else
-                    yield return output.RecordId;
-
                 do
                 {
-                    readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, recordInfo.PreviousAddress, ref context, session.ctx.serialNum, querySettings);
+                    // Because we traverse the chain, we must wait for any pending read operations to complete.
+                    var readAsyncResult = await session.PsfReadAsync(this.fkv, ref input.QueryKeyRef, ref input, recordInfo.PreviousAddress, ref context, session.ctx.serialNum, querySettings);
                     if (querySettings.IsCanceled)
                         yield break;
-                    (status, output) = readAsyncResult.Complete(out recordInfo);
-                    if (status != Status.OK)    // TODOerr: check other status
+                    var (status, output) = readAsyncResult.Complete();
+
+                    // NOTFOUND means either the key was not found, or the iteration found a deleted record (in which case it may have a good .PreviousAddress).
+                    if (status != Status.OK && status != Status.NOTFOUND)
                         yield break;
 
-                    if (deadRecs.IsDead(output.RecordId, output.Tombstone))
-                        continue;
+                    deadRecs.CheckIfDead(output.RecordId, recordInfo.Tombstone);
+                    if (status != Status.NOTFOUND)
+                        yield return output.RecordId;
 
-                    yield return output.RecordId;
-                } while (output.PreviousAddress != Constants.kInvalidAddress);
+                    recordInfo.PreviousAddress = output.PreviousAddress;
+                } while (recordInfo.PreviousAddress != Constants.kInvalidAddress);
             }
             finally
             {

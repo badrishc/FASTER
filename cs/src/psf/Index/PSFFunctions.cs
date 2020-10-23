@@ -6,6 +6,7 @@
 using FASTER.core;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace PSF.Index
 {
@@ -59,19 +60,19 @@ namespace PSF.Index
                 CopyInMemoryDataToOutput(ref queryKeyPointerRefAsKeyRef, ref input, ref value, ref output, logicalAddress);
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void CopyInMemoryDataToOutput(ref TPSFKey queryKeyPointerRefAsKeyRef, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long logicalAddress)
             {
-                output.RecordId = value;
-                output.Tombstone = this.recordAccessor.IsTombstone(logicalAddress);
+                ref KeyPointer<TPSFKey> storedKeyPointer = ref this.keyAccessor.GetKeyPointerRefFromKeyPointerLogicalAddress(logicalAddress);
+                Debug.Assert(input.PsfOrdinal == storedKeyPointer.PsfOrdinal, "Mismatched input and stored PSF ordinal");
 
-                ref KeyPointer<TPSFKey> storedKeyPointer = ref this.keyAccessor.GetKeyPointerRefFromLogicalAddress(logicalAddress);
+                output.RecordId = value;
+                output.PreviousAddress = storedKeyPointer.PreviousAddress;
 
 #if DEBUG
                 ref KeyPointer<TPSFKey> queryKeyPointer = ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef);
-                Debug.Assert(queryKeyPointer.PsfOrdinal == input.PsfOrdinal, "Mismatched query and input PSF ordinal");
-                Debug.Assert(storedKeyPointer.PsfOrdinal == input.PsfOrdinal, "Mismatched stored and input PSF ordinal");
+                Debug.Assert(input.PsfOrdinal == queryKeyPointer.PsfOrdinal, "Mismatched input and query PSF ordinal");
 #endif
-                output.PreviousAddress = storedKeyPointer.PreviousAddress;
             }
 
             public unsafe void SingleReader(ref TPSFKey queryKeyPointerRefAsKeyRef, ref PSFInput input, ref TRecordId value, ref PSFOutput output, long logicalAddress)
@@ -91,14 +92,21 @@ namespace PSF.Index
 
                 // This record is not in memory, which means we're being called from InternalCompletePendingRead. We can't dereference logicalAddress,
                 // but KeyAccessor can help us navigate to the query key.
+                long recordPhysicalAddress = this.keyAccessor.GetRecordAddressFromValueRef(ref value);
 
+                ref KeyPointer<TPSFKey> queryKeyPointer = ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef);
+                ref KeyPointer<TPSFKey> storedKeyPointer = ref this.keyAccessor.GetKeyPointerRefFromRecordPhysicalAddress(recordPhysicalAddress, queryKeyPointer.PsfOrdinal);
 
                 output.RecordId = value;
+                output.PreviousAddress = storedKeyPointer.PreviousAddress;
+
+                Debug.Assert(input.PsfOrdinal == queryKeyPointer.PsfOrdinal, "Mismatched input and query PSF ordinal");
+                Debug.Assert(input.PsfOrdinal == storedKeyPointer.PsfOrdinal, "Mismatched input and stored PSF ordinal");
             }
 
             public void ReadCompletionCallback(ref TPSFKey _, ref PSFInput input, ref PSFOutput output, PSFContext ctx, Status status, RecordInfo recordInfo)
             {
-                output.Tombstone = recordInfo.Tombstone;
+                ctx.Output = output;
                 this.Queue.Enqueue(output);
             }
             #endregion Reads

@@ -62,6 +62,11 @@ namespace PSF.Index
             /// </summary>
             public ref TPSFKey QueryKeyRef => ref Unsafe.AsRef<TPSFKey>(this.keyPointerMem.GetValidPointer());
 
+            /// <summary>
+            /// The query key for a QueryPSF method
+            /// </summary>
+            public ref KeyPointer<TPSFKey> QueryKeyPointerRef => ref Unsafe.AsRef<KeyPointer<TPSFKey>>(this.keyPointerMem.GetValidPointer());
+
             public void Dispose()
             {
                 if (this.keyPointerMem is {})
@@ -72,7 +77,7 @@ namespace PSF.Index
             }
 
             public override string ToString() 
-                => $"qKey {this.QueryKeyRef}, groupId {this.GroupId}, psfOrd {this.PsfOrdinal}, isDel {this.IsDelete}";
+                => $"qKeyPtr {this.QueryKeyPointerRef}, groupId {this.GroupId}, psfOrd {this.PsfOrdinal}, isDel {this.IsDelete}";
         }
     }
 }

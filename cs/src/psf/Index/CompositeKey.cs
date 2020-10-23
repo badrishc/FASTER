@@ -21,19 +21,10 @@ namespace PSF.Index
         /// <param name="psfOrdinal">The ordinal of the PSF in its parent PSFGroup</param>
         /// <param name="keyPointerSize">Size of the KeyPointer{TPSFKey} struct</param>
         /// <returns>A reference to the key for the PSF identified by psfOrdinal.</returns>
+        /// <remarks>TODOperf: if we omit IsNull keys, then this will have to walk to the key with psfOrdinal.</remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal ref KeyPointer<TPSFKey> GetKeyPointerRef(int psfOrdinal, int keyPointerSize) 
             => ref Unsafe.AsRef<KeyPointer<TPSFKey>>((byte*)Unsafe.AsPointer(ref this) + keyPointerSize * psfOrdinal);
-
-        /// <summary>
-        /// Get a reference to the key for the PSF identified by psfOrdinal.
-        /// </summary>
-        /// <param name="psfOrdinal">The ordinal of the PSF in its parent PSFGroup</param>
-        /// <param name="keyPointerSize">Size of the <see cref="KeyPointer{TPSFKey}"/> struct</param>
-        /// <returns>A reference to the key for the PSF identified by psfOrdinal.</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ref TPSFKey GetKeyRef(int psfOrdinal, int keyPointerSize)
-            => ref GetKeyPointerRef(psfOrdinal, keyPointerSize).Key;
 
         /// <summary>
         /// Returns a reference to the CompositeKey from a reference to the first <see cref="KeyPointer{TPSFKey}"/>
@@ -58,13 +49,14 @@ namespace PSF.Index
         internal void ClearUpdateFlags(int psfCount, int keyPointerSize)
         {
             for (var ii = 0; ii < psfCount; ++ii)
-                this.GetKeyPointerRef(0, keyPointerSize).ClearUpdateFlags();
+                this.GetKeyPointerRef(ii, keyPointerSize).ClearUpdateFlags();
         }
 
         internal class VarLenLength : IVariableLengthStruct<TPSFKey>
         {
             private readonly int size;
 
+            // Note: This assumes null TPSFKeys are part of the key list.
             internal VarLenLength(int keyPointerSize, int psfCount) => this.size = keyPointerSize * psfCount;
 
             public int GetInitialLength() => this.size;

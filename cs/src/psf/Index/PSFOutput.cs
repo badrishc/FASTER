@@ -14,14 +14,11 @@ namespace PSF.Index
         /// </summary>
         internal struct PSFOutput
         {
-            public TRecordId RecordId { get; set; }
+            internal TRecordId RecordId;
 
-            public bool Tombstone { get; set; }
+            internal long PreviousAddress;
 
-            public long PreviousAddress { get; set; }
-
-            public override string ToString()
-                => $"rId {this.RecordId}, tomb {this.Tombstone}, prevAddr {this.PreviousAddress}";
+            public override string ToString() => $"rId {this.RecordId}, prevAddr {this.PreviousAddress}";
         }
     }
 }

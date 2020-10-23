@@ -20,15 +20,25 @@ namespace PSF.Index
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Status ContextPsfRead<TInput, TOutput, TContext, FasterSession>(ref TPSFKey key, ref TInput input, ref TOutput output, long startAddress, ref TContext context,
+        internal Status ContextPsfRead<TInput, TOutput, TContext, FasterSession>(ref TPSFKey key, ref TInput input, ref TOutput output, ref RecordInfo recordInfo, ref TContext context,
                                         FasterSession fasterSession, long serialNo, FasterExecutionContext<TInput, TOutput, TContext> sessionCtx)
             where FasterSession : IFasterSession<TPSFKey, TRecordId, TInput, TOutput, TContext>
         {
             var pcontext = default(PendingContext<TInput, TOutput, TContext>);
-            var internalStatus = this.PsfInternalRead(ref key, ref input, ref output, startAddress, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
-            var status = internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND
-                ? (Status)internalStatus
-                : HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, asyncOp: false, out _);
+            var internalStatus = this.PsfInternalRead(ref key, ref input, ref output, recordInfo.PreviousAddress, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
+            Debug.Assert(internalStatus != OperationStatus.RETRY_NOW);
+
+            Status status;
+            if (internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND)
+            {
+                recordInfo = pcontext.recordInfo;
+                status = (Status)internalStatus;
+            }
+            else
+            {
+                recordInfo = default;
+                status = HandleOperationStatus(sessionCtx, sessionCtx, ref pcontext, fasterSession, internalStatus, asyncOp: false, out _);
+            }
 
             sessionCtx.serialNum = serialNo;
             return status;
@@ -99,7 +109,7 @@ namespace PSF.Index
             var pcontext = default(PendingContext<Input, Output, Context>);
             var groupKeys = groupKeysPair.Before;
 
-            (context as IInputAccessor<Input>).SetDelete(ref input, true);
+            ((context as PSFContext).Functions as IInputAccessor<Input>).SetDelete(ref input, true);
 
             var internalStatus = this.PsfInternalInsert(ref groupKeys.CastToKeyRef<TPSFKey>(), ref value, ref input, ref context,
                                                         ref pcontext, fasterSession, sessionCtx, serialNo);
@@ -123,7 +133,7 @@ namespace PSF.Index
                                     FasterExecutionContext<Input, Output, Context> sessionCtx, long serialNo)
             where FasterSession : IFasterSession<TPSFKey, TRecordId, Input, Output, Context>
         {
-            (context as IInputAccessor<Input>).SetDelete(ref input, false);
+            ((context as PSFContext).Functions as IInputAccessor<Input>).SetDelete(ref input, false);
             var internalStatus = this.PsfInternalInsert(ref groupKeys.CastToKeyRef<TPSFKey>(), ref value, ref input, ref context,
                                                         ref pcontext, fasterSession, sessionCtx, serialNo);
             Status status = internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND
@@ -141,7 +151,7 @@ namespace PSF.Index
         {
             var pcontext = default(PendingContext<Input, Output, Context>);
 
-            (context as IInputAccessor<Input>).SetDelete(ref input, true);
+            ((context as PSFContext).Functions as IInputAccessor<Input>).SetDelete(ref input, false);
 
             var internalStatus = this.PsfInternalInsert(ref key, ref value, ref input, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
             Status status = internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND

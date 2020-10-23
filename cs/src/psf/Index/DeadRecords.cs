@@ -18,7 +18,7 @@ namespace PSF.Index
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal bool IsDead(TRecordId recordId, bool thisInstanceIsDead)
+        internal bool CheckIfDead(TRecordId recordId, bool thisInstanceIsDead)
         {
             if (thisInstanceIsDead)
             {

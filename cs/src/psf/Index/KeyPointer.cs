@@ -18,12 +18,12 @@ namespace PSF.Index
         /// <summary>
         /// The offset to the start of the record
         /// </summary>
-        private ushort offsetToStartOfKeys;
+        private ushort offsetToStartOfKeys; // TODOperf: Make this a byte; key length is constant (pass KeySize to OffsetToStartOfKeys()). The extra byte could be "reserved" for now
 
         /// <summary>
         /// The ordinal of the current <see cref="PSF{TPSFKey, TRecordId}"/>.
         /// </summary>
-        private byte psfOrdinal;           // Note: 'byte' is consistent with Constants.kInvalidPsfOrdinal
+        private byte psfOrdinal;            // Note: 'byte' is consistent with Constants.kInvalidPsfOrdinal
 
         /// <summary>
         /// Flags regarding the PSF.

@@ -98,10 +98,14 @@ namespace PSF.Index
                 {
                     physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
 
-                    if (!comparer.Equals(ref queryKeyPointerRefAsKeyRef, ref hlog.GetKey(physicalAddress)))
+                    // Note: we never have SkipKeyVerification in the PSF flavor of this Read.
+
+                    // The comparer is called during AsyncGetFromDiskCallback with a ref to the beginning of the stored CompsiteKey, so match that here.
+                    var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                    if (!comparer.Equals(ref queryKeyPointerRefAsKeyRef, ref hlog.GetKey(recordPhysicalAddress)))
                     {
-                        logicalAddress = hlog.GetInfo(physicalAddress).PreviousAddress;
-                        TraceBackForKeyMatch(ref queryKeyPointerRefAsKeyRef,
+                        logicalAddress = queryKeyPointer.PreviousAddress;
+                        PsfTraceBackForKeyMatch(ref queryKeyPointer,
                                                 logicalAddress,
                                                 hlog.HeadAddress,
                                                 out logicalAddress,
@@ -206,6 +210,31 @@ namespace PSF.Index
 #endregion
 
             return status;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool PsfTraceBackForKeyMatch(
+                                    ref KeyPointer<TPSFKey> keyPointer,
+                                    long fromLogicalAddress,
+                                    long minOffset,
+                                    out long foundLogicalAddress,
+                                    out long foundPhysicalAddress)
+        {
+            foundLogicalAddress = fromLogicalAddress;
+            while (foundLogicalAddress >= minOffset)
+            {
+                foundPhysicalAddress = hlog.GetPhysicalAddress(foundLogicalAddress);
+
+                // The comparer is called during AsyncGetFromDiskCallback with a ref to the beginning of the stored CompsiteKey, so match that here.
+                var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(foundPhysicalAddress);
+                if (comparer.Equals(ref keyPointer.Key, ref hlog.GetKey(recordPhysicalAddress)))
+                    return true;
+
+                ref KeyPointer<TPSFKey> queryKeyPointer = ref KeyPointer<TPSFKey>.CastFromPhysicalAddress(foundPhysicalAddress);
+                foundLogicalAddress = queryKeyPointer.PreviousAddress;
+            }
+            foundPhysicalAddress = Constants.kInvalidAddress;
+            return false;
         }
 
         [Conditional("PSF_TRACE")]

@@ -11,7 +11,7 @@ namespace PSF.Index
     {
         internal static Status PsfRead<Key, Value, Input, Output, Context, Functions>(this AdvancedClientSession<Key, Value, Input, Output, Context, Functions> session,
                                     PSFSecondaryFasterKV<Key, Value> fkv, ref Key key,
-                                    ref Input input, ref Output output, long startAddress, ref Context context, long serialNo)
+                                    ref Input input, ref Output output, ref RecordInfo recordInfo, ref Context context, long serialNo)
             where Key : struct
             where Value : struct
             where Functions : IAdvancedFunctions<Key, Value, Input, Output, Context>
@@ -19,7 +19,7 @@ namespace PSF.Index
             if (session.SupportAsync) session.UnsafeResumeThread();
             try
             {
-                return fkv.ContextPsfRead(ref key, ref input, ref output, startAddress, ref context, session.FasterSession, serialNo, session.ctx);
+                return fkv.ContextPsfRead(ref key, ref input, ref output, ref recordInfo, ref context, session.FasterSession, serialNo, session.ctx);
             }
             finally
             {
