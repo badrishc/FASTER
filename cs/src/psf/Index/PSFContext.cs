@@ -12,8 +12,6 @@ namespace PSF.Index
         internal class PSFContext
         {
             internal PSFFunctions Functions;
-
-            internal PSFOutput Output;
         }
     }
 }

@@ -40,7 +40,7 @@ namespace FasterPSFSample
                 this.ColorPsf = PSFFasterKV.RegisterPSF(CreatePSFRegistrationSettings<ColorKey>(groupOrdinal++), nameof(this.ColorPsf),
                                                     (k, v) => new ColorKey(Constants.ColorDict[v.ColorArgb]));
                 this.CountBinPsf = PSFFasterKV.RegisterPSF(CreatePSFRegistrationSettings<CountBinKey>(groupOrdinal++), nameof(this.CountBinPsf),
-                                                    (k, v) => CountBinKey.GetBin(v.Count, out int bin) ? new CountBinKey(bin) : (CountBinKey?)null);
+                                                    (k, v) => CountBinKey.GetAndVerifyBin(v.Count, out int bin) ? new CountBinKey(bin) : (CountBinKey?)null);
             }
             else
             {
@@ -49,7 +49,7 @@ namespace FasterPSFSample
                                                 {
                                                     (nameof(this.SizePsf), (k, v) => new CombinedKey((Constants.Size)v.SizeInt)),
                                                     (nameof(this.ColorPsf), (k, v) => new CombinedKey(Constants.ColorDict[v.ColorArgb])),
-                                                    (nameof(this.CountBinPsf), (k, v) => CountBinKey.GetBin(v.Count, out int bin)
+                                                    (nameof(this.CountBinPsf), (k, v) => CountBinKey.GetAndVerifyBin(v.Count, out int bin)
                                                                                                     ? new CombinedKey(bin) : (CombinedKey?)null)
                                                 });
                 this.CombinedSizePsf = psfs[0];

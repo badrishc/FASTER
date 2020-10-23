@@ -15,9 +15,9 @@ namespace FASTER.PSF
     /// <summary>
     /// A PSF-enabled wrapper around a <see cref="ClientSession{Key, Value, Input, Output, TContext, Functions}"/>
     /// </summary>
-    public sealed class PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> : IDisposable,
+    public sealed class PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> : IDisposable
 #if DEBUG
-        IClientSession<TKVKey, TKVValue, TInput, TOutput, TContext>
+        , IClientSession<TKVKey, TKVValue, TInput, TOutput, TContext>
 #endif
         where TFunctions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
     {
@@ -815,42 +815,28 @@ namespace FASTER.PSF
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => MapToUnwrappedFunctions(this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
+            => this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => MapToUnwrappedFunctions(this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
+            => this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => MapToUnwrappedFunctions(this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken), cancellationToken);
+            => this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(TKVKey key, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => MapToUnwrappedFunctions(this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken), cancellationToken);
+            => this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, ref TInput input, long startAddress, TContext userContext = default,
                                                                                                                          long serialNo = 0, CancellationToken cancellationToken = default)
-            => MapToUnwrappedFunctions(this.fkvSession.ReadAsync(ref key, ref input, startAddress, userContext, serialNo, cancellationToken), cancellationToken);
+            => this.fkvSession.ReadAsync(ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAtAddressAsync(long address, ref TInput input, TContext userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => MapToUnwrappedFunctions(this.fkvSession.ReadAtAddressAsync(address, ref input, userContext, serialNo, cancellationToken), cancellationToken);
-
-        private async ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> MapToUnwrappedFunctions(
-                    ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> primaryFkvValueTask,
-                    CancellationToken cancellationToken)
-        {
-            var readAsyncResult = await primaryFkvValueTask;
-            await this.psfSession.UpdateAsync(this.indexingFunctions.ChangeTracker, cancellationToken);
-
-            // Map to unwrapped TFunctions type.
-            var (status, output) = readAsyncResult.Complete();
-            return new FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>(status, output, default);
-        }
-
-
+            => this.fkvSession.ReadAtAddressAsync(address, ref input, userContext, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public Status Upsert(ref TKVKey key, ref TKVValue desiredValue, TContext userContext = default, long serialNo = 0)

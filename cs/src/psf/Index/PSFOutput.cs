@@ -1,8 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
-
 using FASTER.core;
 
 namespace PSF.Index
@@ -17,6 +15,11 @@ namespace PSF.Index
             internal TRecordId RecordId;
 
             internal long PreviousAddress;
+
+            internal bool IsDeleted;
+
+            // Used only for ReadCompletionCallback.
+            internal Status PendingResultStatus;
 
             public override string ToString() => $"rId {this.RecordId}, prevAddr {this.PreviousAddress}";
         }

@@ -272,7 +272,7 @@ namespace PSF.Index
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal OperationStatus PsfInternalInsert<TInput, TOutput, TContext, FasterSession>(
-                        ref TPSFKey firstKeyPointerRefAsKeyRef, ref TRecordId value, ref TInput input, ref TContext context,
+                        ref TPSFKey inputFirstKeyPointerRefAsKeyRef, ref TRecordId value, ref TInput input, ref TContext context,
                         ref PendingContext<TInput, TOutput, TContext> pendingContext,
                         FasterSession fasterSession,
                         FasterExecutionContext<TInput, TOutput, TContext> sessionCtx, long lsn)
@@ -281,7 +281,7 @@ namespace PSF.Index
             var status = default(OperationStatus);
             var latestRecordVersion = -1;
 
-            ref CompositeKey<TPSFKey> compositeKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref firstKeyPointerRefAsKeyRef);
+            ref CompositeKey<TPSFKey> inputCompositeKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref inputFirstKeyPointerRefAsKeyRef);
 
             // Update the KeyPointer links for chains with IsNullAt false (indicating a match with the
             // corresponding PSF) to point to the previous records for all keys in the composite key.
@@ -291,25 +291,33 @@ namespace PSF.Index
             var psfCount = this.KeyAccessor.KeyCount;
             CASHelper* casHelpers = stackalloc CASHelper[psfCount];
             int startOfKeysOffset = 0;
-            PsfTrace($"Insert: {this.KeyAccessor.GetString(ref compositeKey)} | rId {value} |");
+            var inputAccessor = (context as PSFContext).Functions as IInputAccessor<TInput>;
+
+            PsfTrace($"Insert: {this.KeyAccessor.GetString(ref inputCompositeKey)} | rId {value} |");
             for (var psfOrdinal = 0; psfOrdinal < psfCount; ++psfOrdinal)
             {
+                ref KeyPointer<TPSFKey> inputKeyPointer = ref KeyAccessor.GetKeyPointerRef(ref inputCompositeKey, psfOrdinal);
+
                 // For RCU, or in case we had to retry due to CPR_SHIFT and somehow managed to delete
                 // the previously found record, clear out the chain link pointer.
-                this.KeyAccessor.SetPreviousAddress(ref compositeKey, psfOrdinal, Constants.kInvalidAddress);
+                inputKeyPointer.PreviousAddress = Constants.kInvalidAddress;
 
-                this.KeyAccessor.SetOffsetToStartOfKeys(ref compositeKey, psfOrdinal, startOfKeysOffset);
+                inputKeyPointer.OffsetToStartOfKeys = startOfKeysOffset;
                 startOfKeysOffset += this.KeyAccessor.KeyPointerSize;
 
                 ref CASHelper casHelper = ref casHelpers[psfOrdinal];
-                if (this.KeyAccessor.IsNullAt(ref compositeKey, psfOrdinal))
+                if (inputKeyPointer.IsNull)
                 {
                     casHelper.isNull = true;
                     PsfTrace($" null");
                     continue;
                 }
 
-                casHelper.hash = this.KeyAccessor.GetHashCode64(ref compositeKey, psfOrdinal);
+                // ConcurrentReader and SingleReader are not called for tombstoned records, so instead we keep that state in the keyPointer.
+                if (inputAccessor.IsDelete(ref input))
+                    inputKeyPointer.IsDeleted = true;
+
+                casHelper.hash = this.KeyAccessor.GetHashCode64(ref inputCompositeKey, psfOrdinal);
                 var tag = (ushort)((ulong)casHelper.hash >> Constants.kHashTagShift);
 
                 if (sessionCtx.phase != Phase.REST)
@@ -332,19 +340,19 @@ namespace PSF.Index
                         // Note that we do not backtrace here because we are not replacing the value at the key; 
                         // instead, we insert at the top of the hash chain. Track the latest record version we've seen.
                         long physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
-                        var recordAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
-                        if (hlog.GetInfo(physicalAddress).Tombstone)
+                        ref RecordInfo recordInfo = ref hlog.GetInfo(this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress));
+                        ref KeyPointer<TPSFKey> prevKeyPointer = ref KeyPointer<TPSFKey>.CastFromPhysicalAddress(physicalAddress);
+                        if (recordInfo.Tombstone || prevKeyPointer.IsDeleted)
                         {
-                            // The chain might extend past a tombstoned record so we must include it in the chain
-                            // unless its prevLink at psfOrdinal is invalid.
-                            var prevAddress = this.KeyAccessor.GetPreviousAddress(physicalAddress);
-                            if (prevAddress < hlog.BeginAddress)
+                            // The chain might extend past a tombstoned/deleted record so we must include it in the chain.
+                            // unless its previousAddress at psfOrdinal is invalid, in which case we can elide it from the chain.
+                            if (prevKeyPointer.PreviousAddress < hlog.BeginAddress)
                                 continue;
                         }
-                        latestRecordVersion = Math.Max(latestRecordVersion, hlog.GetInfo(recordAddress).Version);
+                        latestRecordVersion = Math.Max(latestRecordVersion, recordInfo.Version);
                     }
 
-                    this.KeyAccessor.SetPreviousAddress(ref compositeKey, psfOrdinal, logicalAddress);
+                    inputKeyPointer.PreviousAddress = logicalAddress;
                 }
                 else
                 {
@@ -370,25 +378,26 @@ namespace PSF.Index
 #region Create new record in the mutable region
             CreateNewRecord:
             {
-                var functions = (context as PSFContext).Functions as IInputAccessor<TInput>;
-
                 // Create the new record. Because we are updating multiple hash buckets, mark the record as invalid to start,
                 // so it is not visible until we have successfully updated all chains.
-                var recordSize = hlog.GetRecordSize(ref firstKeyPointerRefAsKeyRef, ref value);
+                var recordSize = hlog.GetRecordSize(ref inputFirstKeyPointerRefAsKeyRef, ref value);
                 BlockAllocate(recordSize, out long newLogicalAddress, sessionCtx, fasterSession);
                 var newPhysicalAddress = hlog.GetPhysicalAddress(newLogicalAddress);
                 RecordInfo.WriteInfo(ref hlog.GetInfo(newPhysicalAddress), sessionCtx.version,
-                                     final:true, tombstone: functions.IsDelete(ref input), invalidBit:true,
+                                     // tombstone is always false; see above setting of keyPointer.IsDelete.
+                                     final: true, tombstone: false, invalidBit:true,
                                      Constants.kInvalidAddress);  // We manage all prev addresses within CompositeKey
                 ref TPSFKey storedFirstKeyPointerRefAsKeyRef = ref hlog.GetKey(newPhysicalAddress);
-                ref CompositeKey<TPSFKey> storedKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref storedFirstKeyPointerRefAsKeyRef);
-                hlog.ShallowCopy(ref firstKeyPointerRefAsKeyRef, ref storedFirstKeyPointerRefAsKeyRef);
+                ref CompositeKey<TPSFKey> storedCompositeKey = ref CompositeKey<TPSFKey>.CastFromFirstKeyPointerRefAsKeyRef(ref storedFirstKeyPointerRefAsKeyRef);
+                hlog.ShallowCopy(ref inputFirstKeyPointerRefAsKeyRef, ref storedFirstKeyPointerRefAsKeyRef);
                 hlog.ShallowCopy(ref value, ref hlog.GetValue(newPhysicalAddress));
 
                 PsfTraceLine();
                 newLogicalAddress += RecordInfo.GetLength();
                 for (var psfOrdinal = 0; psfOrdinal < psfCount; ++psfOrdinal, newLogicalAddress += this.KeyAccessor.KeyPointerSize)
                 {
+                    ref KeyPointer<TPSFKey> storedKeyPointer = ref KeyAccessor.GetKeyPointerRef(ref storedCompositeKey, psfOrdinal);
+
                     var casHelper = casHelpers[psfOrdinal];
                     var tag = (ushort)((ulong)casHelper.hash >> Constants.kHashTagShift);
 
@@ -420,7 +429,7 @@ namespace PSF.Index
                         {
                             PsfTrace($" / {foundEntry.Address}");
                             casHelper.entry.word = foundEntry.word;
-                            this.KeyAccessor.SetPreviousAddress(ref storedKey, psfOrdinal, foundEntry.Address);
+                            storedKeyPointer.PreviousAddress = foundEntry.Address;
                             continue;
                         }
 
@@ -436,7 +445,7 @@ namespace PSF.Index
                     hlog.GetInfo(newPhysicalAddress).Invalid = false;
                 }
 
-                storedKey.ClearUpdateFlags(this.KeyAccessor.KeyCount, this.KeyAccessor.KeyPointerSize);
+                storedCompositeKey.ClearUpdateFlags(this.KeyAccessor.KeyCount, this.KeyAccessor.KeyPointerSize);
                 status = OperationStatus.SUCCESS;
                 goto LatchRelease;
             }
@@ -446,7 +455,7 @@ namespace PSF.Index
             CreatePendingContext:
             {
                 pendingContext.type = OperationType.INSERT;
-                pendingContext.key = hlog.GetKeyContainer(ref firstKeyPointerRefAsKeyRef);  // The Insert key has the full PsfCount of KeyPointers
+                pendingContext.key = hlog.GetKeyContainer(ref inputFirstKeyPointerRefAsKeyRef);  // The Insert key has the full PsfCount of KeyPointers
                 pendingContext.value = hlog.GetValueContainer(ref value);
                 pendingContext.input = fasterSession.GetHeapContainer(ref input);
                 pendingContext.userContext = default;
@@ -463,7 +472,7 @@ namespace PSF.Index
 #endregion
 
             return status == OperationStatus.RETRY_NOW
-                ? PsfInternalInsert(ref firstKeyPointerRefAsKeyRef, ref value, ref input, ref context, ref pendingContext, fasterSession, sessionCtx, lsn)
+                ? PsfInternalInsert(ref inputFirstKeyPointerRefAsKeyRef, ref value, ref input, ref context, ref pendingContext, fasterSession, sessionCtx, lsn)
                 : status;
         }
    }

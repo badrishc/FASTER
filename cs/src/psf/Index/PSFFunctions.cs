@@ -68,6 +68,7 @@ namespace PSF.Index
 
                 output.RecordId = value;
                 output.PreviousAddress = storedKeyPointer.PreviousAddress;
+                output.IsDeleted = storedKeyPointer.IsDeleted;
 
 #if DEBUG
                 ref KeyPointer<TPSFKey> queryKeyPointer = ref KeyPointer<TPSFKey>.CastFromKeyRef(ref queryKeyPointerRefAsKeyRef);
@@ -99,6 +100,7 @@ namespace PSF.Index
 
                 output.RecordId = value;
                 output.PreviousAddress = storedKeyPointer.PreviousAddress;
+                output.IsDeleted = storedKeyPointer.IsDeleted;
 
                 Debug.Assert(input.PsfOrdinal == queryKeyPointer.PsfOrdinal, "Mismatched input and query PSF ordinal");
                 Debug.Assert(input.PsfOrdinal == storedKeyPointer.PsfOrdinal, "Mismatched input and stored PSF ordinal");
@@ -106,7 +108,7 @@ namespace PSF.Index
 
             public void ReadCompletionCallback(ref TPSFKey _, ref PSFInput input, ref PSFOutput output, PSFContext ctx, Status status, RecordInfo recordInfo)
             {
-                ctx.Output = output;
+                output.PendingResultStatus = status;
                 this.Queue.Enqueue(output);
             }
             #endregion Reads

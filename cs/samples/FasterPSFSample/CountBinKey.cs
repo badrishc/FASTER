@@ -16,10 +16,12 @@ namespace FasterPSFSample
 
         public CountBinKey(int bin) => this.Bin = bin;
 
-        internal static bool GetBin(int numOrders, out int bin)
+        internal static int GetBin(int numOrders) => numOrders / BinSize;
+
+        internal static bool GetAndVerifyBin(int numOrders, out int bin)
         {
             // Skip the last bin during initial inserts to illustrate not matching the PSF (returning null)
-            bin = numOrders / BinSize;
+            bin = GetBin(numOrders);
             return WantLastBin || bin < LastBin;
         }
 

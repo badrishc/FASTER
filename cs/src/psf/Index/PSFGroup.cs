@@ -379,17 +379,21 @@ namespace PSF.Index
                         // Because we traverse the chain, we must wait for any pending read operations to complete.
                         // TODOperf: extend the queue for multiple sync+pending operations rather than spinWaiting in CompletePending for each pending record.
                         session.CompletePending(spinWait: true);
-                        // TODO verify the queued output
-                        output = context.Functions.Queue.Count > 0 ? context.Functions.Queue.Dequeue() : default;
-                        output = context.Output;
+                        if (context.Functions.Queue.Count == 0)
+                        {
+                            Debug.Fail("RCC was not called");
+                            yield break;
+                        }
+                        output = context.Functions.Queue.Dequeue();
+                        status = output.PendingResultStatus;
                     }
 
-                    // NOTFOUND means either the key was not found, or the iteration found a deleted record (in which case it may have a good .PreviousAddress).
-                    if (status != Status.OK && status != Status.NOTFOUND)
+                    // ConcurrentReader and SingleReader are not called for tombstoned records, so instead we keep that state in the keyPointer.
+                    // Thus, Status.NOTFOUND should only be returned if the key was not found.
+                    if (status != Status.OK)
                         yield break;
 
-                    deadRecs.CheckIfDead(output.RecordId, recordInfo.Tombstone);
-                    if (status != Status.NOTFOUND)
+                    if (!deadRecs.CheckIfDead(output.RecordId, output.IsDeleted))
                         yield return output.RecordId;
 
                     recordInfo.PreviousAddress = output.PreviousAddress;
@@ -425,12 +429,12 @@ namespace PSF.Index
                         yield break;
                     var (status, output) = readAsyncResult.Complete();
 
-                    // NOTFOUND means either the key was not found, or the iteration found a deleted record (in which case it may have a good .PreviousAddress).
-                    if (status != Status.OK && status != Status.NOTFOUND)
+                    // ConcurrentReader and SingleReader are not called for tombstoned records, so instead we keep that state in the keyPointer.
+                    // Thus, Status.NOTFOUND should only be returned if the key was not found.
+                    if (status != Status.OK)
                         yield break;
 
-                    deadRecs.CheckIfDead(output.RecordId, recordInfo.Tombstone);
-                    if (status != Status.NOTFOUND)
+                    if (!deadRecs.CheckIfDead(output.RecordId, output.IsDeleted))
                         yield return output.RecordId;
 
                     recordInfo.PreviousAddress = output.PreviousAddress;

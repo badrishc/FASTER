@@ -50,19 +50,28 @@ namespace PSF.Index
         // in any TPSFKey chain for it). Also used in PSFChangeTracker to determine whether to set kUnlinkOldBit.
         private const byte kIsNullBit = 0x01;
 
+        // For Update and insert, the TPSFKey has changed; add this record to the new TPSFKey chain.
+        private const byte kIsDeletedBit = 0x02;
+
         // If Key size is > 4, then reinterpret the Key as an offset to the actual key. (TODOperf not implemented)
-        private const byte kIsOutOfLineKeyBit = 0x02;
+        private const byte kIsOutOfLineKeyBit = 0x04;
 
         // For Update, the TPSFKey has changed; remove this record from the previous TPSFKey chain.
-        private const byte kUnlinkOldBit = 0x04;
+        private const byte kUnlinkOldBit = 0x08;
 
         // For Update and insert, the TPSFKey has changed; add this record to the new TPSFKey chain.
-        private const byte kLinkNewBit = 0x08;
+        private const byte kLinkNewBit = 0x10;
 
         internal bool IsNull
         {
             get => (this.flags & kIsNullBit) != 0;
             set => this.flags = value ? (byte)(this.flags | kIsNullBit) : (byte)(this.flags & ~kIsNullBit);
+        }
+
+        internal bool IsDeleted
+        {
+            get => (this.flags & kIsDeletedBit) != 0;
+            set => this.flags = value ? (byte)(this.flags | kIsDeletedBit) : (byte)(this.flags & ~kIsDeletedBit);
         }
 
         internal bool IsUnlinkOld

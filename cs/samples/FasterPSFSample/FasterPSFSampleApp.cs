@@ -118,7 +118,7 @@ namespace FasterPSFSample
                 };
 
                 keyDict[key] = value;
-                CountBinKey.GetBin(value.Count, out int bin);
+                CountBinKey.GetAndVerifyBin(value.Count, out int bin);
                 var isBlue = value.ColorArgb == Color.Blue.ToArgb();
                 var isRed = value.ColorArgb == Color.Red.ToArgb();
                 var isMedium = value.SizeInt == (int)Constants.Size.Medium;
@@ -445,13 +445,19 @@ namespace FasterPSFSample
             return ok;
         }
 
-        private static void WriteResult(bool isInitial, string name, int expectedCount, int actualCount)
+        private static void WriteResult(bool isInitial, string name, int expectedCount, int actualCount, bool allResultsMatch)
         {
             var tag = isInitial ? "Initial" : "Updated";
+            if (expectedCount == actualCount && allResultsMatch) { 
+                Console.WriteLine($"{indent4}{tag} {name} Passed: expected == actual ({expectedCount})");
+                return;
+            }
             Console.WriteLine(expectedCount == actualCount
-                                ? $"{indent4}{tag} {name} Passed: expected == actual ({expectedCount})"
+                                ? $"{indent4}{tag} {name} Failed: expected == actual ({expectedCount}), but not all results matched"
                                 : $"{indent4}{tag} {name} Failed: expected ({expectedCount}) != actual ({actualCount})");
         }
+
+        private static bool AllMatch<TValue>(FasterKVProviderData<Key, TValue>[] datas, Func<TValue, bool> pred) => datas.All(data => pred(data.GetValue()));
 
         internal static bool UpdateSizeByUpsert<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
             where TValue : IOrders, new()
@@ -471,9 +477,9 @@ namespace FasterPSFSample
                     : session.QueryPSF(fpsf.CombinedSizePsf, new CombinedKey(size)).ToArray();
 
             var xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
-            WriteResult(isInitial: true, "XXLarge", 0, xxlDatas.Length);
+            WriteResult(isInitial: true, "XXLarge", 0, xxlDatas.Length, true);
             var mediumDatas = GetSizeDatas(Constants.Size.Medium);
-            WriteResult(isInitial: true, "Medium", mediumCount, mediumDatas.Length);
+            WriteResult(isInitial: true, "Medium", mediumCount, mediumDatas.Length, AllMatch(mediumDatas, val => val.SizeInt == (int)Constants.Size.Medium));
             var expected = mediumDatas.Length;
             Console.WriteLine($"{indent2}Changing all Medium to XXLarge");
 
@@ -502,8 +508,8 @@ namespace FasterPSFSample
             xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
             mediumDatas = GetSizeDatas(Constants.Size.Medium);
             bool ok = xxlDatas.Length == expected && mediumDatas.Length == 0;
-            WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length);
-            WriteResult(isInitial: false, "Medium", 0, mediumDatas.Length);
+            WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XLarge));
+            WriteResult(isInitial: false, "Medium", 0, mediumDatas.Length, true);
             return ok;
         }
 
@@ -517,7 +523,7 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Updating Colors via RMW");
 
-            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
+            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
 
             FasterKVProviderData<Key, TValue>[] GetColorDatas(Color color)
                 => useMultiGroups
@@ -525,9 +531,9 @@ namespace FasterPSFSample
                     : session.QueryPSF(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArray();
 
             var purpleDatas = GetColorDatas(Color.Purple);
-            WriteResult(isInitial: true, "Purple", 0, purpleDatas.Length);
+            WriteResult(isInitial: true, "Purple", 0, purpleDatas.Length, true);
             var blueDatas = GetColorDatas(Color.Blue);
-            WriteResult(isInitial: true, "Blue", blueCount, blueDatas.Length);
+            WriteResult(isInitial: true, "Blue", blueCount, blueDatas.Length, AllMatch(blueDatas, val => val.ColorArgb == Color.Blue.ToArgb()));
             var expected = blueDatas.Length;
             Console.WriteLine($"{indent2}Changing all Blue to Purple");
 
@@ -548,8 +554,8 @@ namespace FasterPSFSample
             purpleDatas = GetColorDatas(Color.Purple);
             blueDatas = GetColorDatas(Color.Blue);
             bool ok = purpleDatas.Length == expected && blueDatas.Length == 0;
-            WriteResult(isInitial: false, "Purple", expected, purpleDatas.Length);
-            WriteResult(isInitial: false, "Blue", 0, blueDatas.Length);
+            WriteResult(isInitial: false, "Purple", expected, purpleDatas.Length, AllMatch(purpleDatas, val => val.ColorArgb == Color.Purple.ToArgb()));
+            WriteResult(isInitial: false, "Blue", 0, blueDatas.Length, true);
             return ok;
         }
 
@@ -575,18 +581,18 @@ namespace FasterPSFSample
             var lastBinDatas = GetCountDatas(CountBinKey.LastBin);
             int expectedLastBinCount = initialSkippedLastBinCount - lastBinKeys.Count();
             var ok = lastBinDatas.Length == expectedLastBinCount;
-            WriteResult(isInitial: true, "LastBin", expectedLastBinCount, lastBinDatas.Length);
+            WriteResult(isInitial: true, "LastBin", expectedLastBinCount, lastBinDatas.Length, AllMatch(lastBinDatas, val => CountBinKey.GetBin(val.Count) == CountBinKey.LastBin));
 
             var bin7Datas = GetCountDatas(bin7);
             ok &= bin7Datas.Length == bin7Count;
-            WriteResult(isInitial: true, "Bin7", bin7Count, bin7Datas.Length);
+            WriteResult(isInitial: true, "Bin7", bin7Count, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7));
 
             Console.WriteLine($"{indent2}Changing all Bin7 to LastBin");
             var context = new Context<TValue>();
             foreach (var providerData in bin7Datas)
             {
                 // Get the old value and confirm it's as expected. We cannot have ref locals because this is an async function.
-                Debug.Assert(CountBinKey.GetBin(providerData.GetValue().Count, out int tempBin) && tempBin == bin7);
+                Debug.Assert(CountBinKey.GetAndVerifyBin(providerData.GetValue().Count, out int tempBin) && tempBin == bin7);
 
                 // Clone the old value with updated Count; note that this cannot modify the "ref providerData.GetValue()" in-place as that will bypass PSFs.
                 var newValue = new TValue
@@ -596,7 +602,7 @@ namespace FasterPSFSample
                     ColorArgb = providerData.GetValue().ColorArgb,
                     Count = providerData.GetValue().Count + (CountBinKey.LastBin - bin7) * CountBinKey.BinSize // updated
                 };
-                Debug.Assert(CountBinKey.GetBin(newValue.Count, out tempBin) && tempBin == CountBinKey.LastBin);
+                Debug.Assert(CountBinKey.GetAndVerifyBin(newValue.Count, out tempBin) && tempBin == CountBinKey.LastBin);
 
                 // Reuse the same key. Note: there is no UpsertAsync().
                 session.Upsert(ref providerData.GetKey(), ref newValue, context, serialNo);
@@ -606,11 +612,11 @@ namespace FasterPSFSample
             expectedLastBinCount += bin7Datas.Length;
             lastBinDatas = GetCountDatas(CountBinKey.LastBin);
             ok &= lastBinDatas.Length == expectedLastBinCount;
-            WriteResult(isInitial: false, "LastBin", expectedLastBinCount, lastBinDatas.Length);
+            WriteResult(isInitial: false, "LastBin", expectedLastBinCount, lastBinDatas.Length, AllMatch(lastBinDatas, val => CountBinKey.GetBin(val.Count) == CountBinKey.LastBin));
 
             bin7Datas = GetCountDatas(bin7);
             ok &= bin7Datas.Length == 0;
-            WriteResult(isInitial: false, "Bin7", 0, bin7Datas.Length);
+            WriteResult(isInitial: false, "Bin7", 0, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7));
             return ok;
         }
 
