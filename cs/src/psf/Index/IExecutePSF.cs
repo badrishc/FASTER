@@ -119,6 +119,14 @@ namespace PSF.Index
         Status Delete(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker);
 
         /// <summary>
+        /// Delete the RecordId
+        /// </summary>
+        /// <param name="sessionObj">The FKV session for this group, held by the PSF session</param>
+        /// <param name="changeTracker">The record of previous key values and updated values</param>
+        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
+        ValueTask DeleteAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken);
+
+        /// <summary>
         /// Grow the hash index
         /// </summary>
         bool GrowIndex();
@@ -190,19 +198,19 @@ namespace PSF.Index
         /// Flush PSF logs until current tail (records are still retained in memory)
         /// </summary>
         /// <param name="wait">Synchronous wait for operation to complete</param>
-        void FlushLog(bool wait);
+        void Flush(bool wait);
 
         /// <summary>
         /// Flush PSF logs and evict all records from memory
         /// </summary>
         /// <param name="wait">Synchronous wait for operation to complete</param>
         /// <returns>When wait is false, this tells whether the full eviction was successfully registered with FASTER</returns>
-        void FlushAndEvictLog(bool wait);
+        void FlushAndEvict(bool wait);
 
         /// <summary>
         /// Delete PSF logs entirely from memory. Cannot allocate on the log
         /// after this point. This is a synchronous operation.
         /// </summary>
-        void DisposeLogFromMemory();
+        void DisposeFromMemory();
     }
 }

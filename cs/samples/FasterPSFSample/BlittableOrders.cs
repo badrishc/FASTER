@@ -3,6 +3,7 @@
 
 using FASTER.core;
 using System;
+using System.Diagnostics;
 
 namespace FasterPSFSample
 {
@@ -23,13 +24,26 @@ namespace FasterPSFSample
         {
             #region Read
             public void ConcurrentReader(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, ref Output<BlittableOrders> dst)
-                => dst.Value = value;
+            {
+                if (key.MemberTuple != ((IOrders)value).MemberTuple)
+                    throw new SampleException("Mismatched key and value MemberTuples");
+                dst.Value = value;
+            }
 
             public void SingleReader(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value, ref Output<BlittableOrders> dst)
-                => dst.Value = value;
+            {
+                if (key.MemberTuple != ((IOrders)
+                    value).MemberTuple)
+                    throw new SampleException("Mismatched key and value MemberTuples");
+                dst.Value = value;
+            }
 
             public void ReadCompletionCallback(ref Key key, ref Input<BlittableOrders> input, ref Output<BlittableOrders> output, Context<BlittableOrders> context, Status status)
-            { /* Output is not set by pending operations */ }
+            {
+                if (key.MemberTuple != ((IOrders)output.Value).MemberTuple)
+                    throw new SampleException("Mismatched key and value MemberTuples");
+                context.PendingResults.Add((status, key, output.Value));
+            }
             #endregion Read
 
             #region Upsert
@@ -50,7 +64,10 @@ namespace FasterPSFSample
             public bool NeedCopyUpdate(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value) => true;
 
             public void CopyUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders oldValue, ref BlittableOrders newValue)
-                => throw new NotImplementedException();
+            {
+                newValue = oldValue;
+                InPlaceUpdater(ref key, ref input, ref newValue);
+            }
 
             public void InitialUpdater(ref Key key, ref Input<BlittableOrders> input, ref BlittableOrders value)
                 => value = input.InitialUpdateValue;

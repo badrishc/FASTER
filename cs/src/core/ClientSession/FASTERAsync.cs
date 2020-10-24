@@ -180,7 +180,6 @@ namespace FASTER.core
 
             internal readonly ReadAsyncInternal<Input, Output, Context> readAsyncInternal;
 
-            // Called for synchronously-completed Reads
             internal ReadAsyncResult(Status status, Output output, RecordInfo recordInfo)
             {
                 this.status = status;
@@ -189,7 +188,6 @@ namespace FASTER.core
                 this.readAsyncInternal = default;
             }
 
-            // Called for Reads that have gone pending for IO
             internal ReadAsyncResult(
                 FasterKV<Key, Value> fasterKV,
                 IFasterSession<Key, Value, Input, Output, Context> fasterSession,
@@ -247,7 +245,6 @@ namespace FASTER.core
                 Debug.Assert(internalStatus != OperationStatus.RETRY_NOW);
                 Debug.Assert(internalStatus != OperationStatus.RETRY_LATER);
 
-                internalStatus = InternalRead(ref key, ref input, ref output, startAddress, ref context, ref pcontext, fasterSession, currentCtx, serialNo);
                 if (internalStatus == OperationStatus.SUCCESS || internalStatus == OperationStatus.NOTFOUND)
                 {
                     return new ValueTask<ReadAsyncResult<Input, Output, Context>>(new ReadAsyncResult<Input, Output, Context>((Status)internalStatus, output, pcontext.recordInfo));

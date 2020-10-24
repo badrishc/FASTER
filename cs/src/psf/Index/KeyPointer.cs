@@ -36,11 +36,11 @@ namespace PSF.Index
         internal TPSFKey Key;               // TODOperf: for Key size > 4, reinterpret this an offset to the actual value (after the KeyPointer list)
         #endregion Fields
 
-        internal void Initialize(int psfOrdinal, ref TPSFKey key)
+        internal void Initialize(int psfOrdinal, ref TPSFKey key, int keyPointerSize)
         {
             this.PreviousAddress = Constants.kInvalidAddress;
-            this.offsetToStartOfKeys = 0;
             this.PsfOrdinal = psfOrdinal;
+            this.offsetToStartOfKeys = (ushort)(psfOrdinal * keyPointerSize);   // Note: Assumes null keys are present in the key list
             this.flags = 0;
             this.Key = key;
         }
@@ -127,15 +127,15 @@ namespace PSF.Index
                 if (pred)
                 {
                     flagStrBuilder.Append(separator).Append(name);
-                    separator = "|";
+                    separator = " | ";
                 }
             }
             appendFlag(this.IsNull, nameof(this.IsNull));
             appendFlag(this.IsOutOfLineKey, nameof(this.IsOutOfLineKey));
             appendFlag(this.IsUnlinkOld, nameof(this.IsUnlinkOld));
             appendFlag(this.IsLinkNew, nameof(this.IsLinkNew));
-
-            return $"Key: {this.Key}, psfOrd {this.psfOrdinal}, prevAddr {this.PreviousAddress}, ofsStartKeys {this.offsetToStartOfKeys}, flags {flagStrBuilder}";
+            var flagStr = flagStrBuilder.Length > 0 ? flagStrBuilder.ToString() : "<none>";
+            return $"Key: {this.Key}, psfOrd {this.psfOrdinal}, prevAddr {this.PreviousAddress}, ofsStartKeys {this.offsetToStartOfKeys}, flags {flagStr}";
         }
     }
 }

@@ -58,44 +58,37 @@ namespace FASTER.PSF
         #region PSF Queries
         internal FasterKVProviderData<TKVKey, TKVValue> CreateProviderData(long logicalAddress, LivenessFunctions<TKVKey, TKVValue>.Context context)
         {
-            // Look up logicalAddress in the primary FasterKV by address only, and returns the key.
-            var input = new LivenessFunctions<TKVKey, TKVValue>.Input { logAccessor = this.fkvLogAccessor };
-
             try
             {
-                //  We ignore the updated previousAddress here; we're just looking for the key.
+                // Look up logicalAddress in the primary FasterKV by address only, and returns the key and value. The key is needed for
+                // the liveness loop, and if the record is live, we'll return the key and value this call obtains.
+                var input = new LivenessFunctions<TKVKey, TKVValue>.Input { logAccessor = this.fkvLogAccessor };
+
                 Status status = this.fkvLivenessSession.ReadAtAddress(logicalAddress, ref input, ref context.output, context);
                 if (status == Status.PENDING)
+                {
                     this.fkvLivenessSession.CompletePending(spinWait: true);
+                    status = context.PendingResultStatus;
+                }
                 if (status != Status.OK)
                     return null;
 
-                // Now confirm liveness: Read all records in the key chain in a loop until we find logicalAddress or run out of records.
-                // Start initially by reading the key; then previousAddress will be updated on each loop iteration and will be used for the following iteration.
+                // Now prepare to confirm liveness: Look up the key and see if the address matches (it must be the highest address for the key).
+                // Setting input.LogAccessor to null switches Concurrent/SingleReader mode from "get the key and value at this address" to "traverse the liveness chain".
                 input.logAccessor = null;
-                RecordInfo recordInfo = default;
-                context.output.currentAddress = Constants.kInvalidAddress;
  
-                while (true)
+                status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, context);
+                if (status == Status.PENDING)
                 {
-                    status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, ref recordInfo, context);
-                    if (status == Status.PENDING)
-                    {
-                        this.fkvLivenessSession.CompletePending(spinWait: true);
-                        recordInfo = context.output.recordInfo;
-                        status = context.status;
-                    }
-
-                    // Invariant: address chains always move downward. Therefore if context.output.currentAddress < logicalAddress, logicalAddress is not live.
-                    if (status != Status.OK || context.output.currentAddress < logicalAddress)
-                        return null;
-                    
-                    if (context.output.currentAddress == logicalAddress)
-                    {
-                        context.output.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
-                        return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
-                    }
+                    this.fkvLivenessSession.CompletePending(spinWait: true);
+                    status = context.PendingResultStatus;
                 }
+
+                if (status != Status.OK || context.output.currentAddress != logicalAddress)
+                    return null;
+
+                context.output.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
+                return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
             }
             finally
             {
@@ -124,11 +117,11 @@ namespace FASTER.PSF
                 if (querySettings.IsCanceled)
                     return null;
                 (status, initialOutput) = readAsyncResult.Complete();
-                if (status != Status.OK)    // TODOerr: check other status
+                if (status != Status.OK)
                     return null;
 
-                // Now confirm liveness: Read all records in the key chain in a loop until we find logicalAddress or run out of records.
-                // Start initially by reading the key; then previousAddress will be updated on each loop iteration and will be used for the following iteration.
+                // Now prepare to confirm liveness: Look up the key and see if the address matches (it must be the highest address for the key).
+                // Setting input.LogAccessor to null switches Concurrent/SingleReader mode from "get the key and value at this address" to "traverse the liveness chain".
                 input.logAccessor = null;
                 RecordInfo recordInfo = default;
 
@@ -140,15 +133,11 @@ namespace FASTER.PSF
                     LivenessFunctions<TKVKey, TKVValue>.Output output = default;
                     (status, output) = readAsyncResult.Complete(out recordInfo);
 
-                    // Invariant: address chains always move downward. Therefore if context.output.currentAddress < logicalAddress, logicalAddress is not live.
-                    if (status != Status.OK || output.currentAddress < logicalAddress)
+                    if (status != Status.OK || output.currentAddress != logicalAddress)
                         return null;
 
-                    if (output.currentAddress == logicalAddress)
-                    {
-                        initialOutput.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
-                        return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
-                    }
+                    initialOutput.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
+                    return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
                 }
             }
             finally
@@ -786,7 +775,7 @@ namespace FASTER.PSF
         public string ID => this.fkvSession.ID;
 
         /// <inheritdoc/>
-        public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, TContext userContext, long serialNo)
+        public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, TContext userContext = default, long serialNo = 0)
             => this.fkvSession.Read(ref key, ref input, ref output, userContext, serialNo);
 
         /// <inheritdoc/>
@@ -907,7 +896,9 @@ namespace FASTER.PSF
         {
             ThrowIfActive();
             var status = this.fkvSession.Delete(ref key, userContext, serialNo);
-            if (status == Status.OK)
+
+            // If there is no changeTracker, the record was not in memory, so we could not get the old value; we will have to let the liveness check fail the dead record.
+            if (status == Status.OK && this.indexingFunctions.ChangeTracker is {})
             {
                 status = this.psfSession.Delete(this.indexingFunctions.ChangeTracker);
                 this.indexingFunctions.Clear();
@@ -952,10 +943,25 @@ namespace FASTER.PSF
         /// <returns></returns>
         public bool CompletePending(bool spinWait = false, bool spinWaitForCommit = false)
         {
-            // TODO parallelize fkv and psfManager CompletePending
             var result = this.fkvSession.CompletePending(spinWait, spinWaitForCommit);
+
+            // Execute any pending change operations on the session.
             if (this.DetachTrackers(out var trackers))
-                this.psfSession.ProcessChanges(trackers);
+            {
+                foreach (var tracker in trackers)
+                {
+                    Status status = tracker.UpdateOp switch
+                    {
+                        var op when op == UpdateOperation.IPU || op == UpdateOperation.RCU || op == UpdateOperation.Insert => this.psfSession.Update(tracker),
+                        UpdateOperation.Delete => this.psfSession.Delete(tracker),
+                        _ => throw new PSFInternalErrorException("Unexpected UpdateOperation"),
+                    };
+                    if (status == Status.ERROR)
+                    {
+                        // TODO handle error in CompletePending
+                    }
+                }
+            }
             return this.psfSession.CompletePending(spinWait, spinWaitForCommit) && result; // TODO: Resolve issues with non-async operations in groups
         }
 
@@ -968,8 +974,21 @@ namespace FASTER.PSF
         {
             // Simple sequence to avoid allocating Tasks as there is no Task.WhenAll for ValueTask
             await this.fkvSession.CompletePendingAsync(waitForCommit, cancellationToken);
+
+            // Execute any pending change operations on the session.
             if (this.DetachTrackers(out var trackers))
-                await this.psfSession.ProcessChangesAsync(trackers);
+            {
+                foreach (var tracker in trackers)
+                {
+                    ValueTask task = tracker.UpdateOp switch
+                    {
+                        var op when op == UpdateOperation.IPU || op == UpdateOperation.RCU || op == UpdateOperation.Insert => this.psfSession.UpdateAsync(tracker, cancellationToken),
+                        UpdateOperation.Delete => this.psfSession.DeleteAsync(tracker, cancellationToken),
+                        _ => throw new PSFInternalErrorException("Unexpected UpdateOperation"),
+                    };
+                    await task;
+                }
+            }
             await this.psfSession.CompletePendingAsync(waitForCommit, cancellationToken);    // TODO: Resolve issues with non-async operations in groups
         }
 

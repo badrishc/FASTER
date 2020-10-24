@@ -30,7 +30,8 @@ namespace FasterPSFSample
             this.PSFFasterKV = new PSFFasterKV<Key, TValue>(
                                 1L << 20, this.logFiles.LogSettings,
                                 null, // TODO: add checkpoints
-                                useObjectValues ? new SerializerSettings<Key, TValue> { valueSerializer = () => new TSerializer() } : null);
+                                useObjectValues ? new SerializerSettings<Key, TValue> { valueSerializer = () => new TSerializer() } : null,
+                                new Key.Comparer());
 
             if (useMultiGroup)
             {
@@ -62,7 +63,7 @@ namespace FasterPSFSample
         {
             var regSettings = new PSFRegistrationSettings<TKey>
             {
-                HashTableSize = 1L << 20,
+                HashTableSize = 1L << LogFiles.HashSizeBits,
                 LogSettings = this.logFiles.PSFLogSettings[groupOrdinal],
                 CheckpointSettings = new CheckpointSettings(),  // TODO checkpoints
                 IPU1CacheSize = 0,          // TODO IPUCache

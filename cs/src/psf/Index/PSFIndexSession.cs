@@ -57,7 +57,7 @@ namespace PSF.Index
         /// </summary>
         /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
         /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
-        /// <returns>A status code indicating the result of the operation</returns>
+        /// <returns>An awaitable task</returns>
         public ValueTask UpdateAsync(PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken)
             => this.psfManager.UpdateAsync(this, changeTracker, cancellationToken);
 
@@ -70,29 +70,13 @@ namespace PSF.Index
             => this.psfManager.Delete(this, changeTracker);
 
         /// <summary>
-        /// Process a set of changes
+        /// Deletes a PSF key/RecordId entry from the chain, possibly by insertion of a "marked deleted" record
         /// </summary>
-        /// <param name="trackers">The set of changes to process</param>
-        public void ProcessChanges(IEnumerable<PSFChangeTracker<TProviderData, TRecordId>> trackers)
-        {
-            foreach (var tracker in trackers)
-            {
-                // TODO: call Update based on tracker.UpdateOp and whether it was a delete
-            }
-        }
-
-        /// <summary>
-        /// Process a set of changes
-        /// </summary>
-        /// <param name="trackers">The set of changes to process</param>
-        public ValueTask ProcessChangesAsync(IEnumerable<PSFChangeTracker<TProviderData, TRecordId>> trackers)
-        {
-            foreach (var tracker in trackers)
-            {
-                // TODO: call UpdateAsync based on tracker.UpdateOp and whether it was a delete
-            }
-            return new ValueTask();
-        }
+        /// <param name="changeTracker">Tracks changes for an existing Key/RecordId entry</param>
+        /// <param name="cancellationToken">Token to check for cancellation of the operation</param>
+        /// <returns>An awaitable task</returns>
+        public ValueTask DeleteAsync(PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken)
+            => this.psfManager.DeleteAsync(this, changeTracker, cancellationToken);
 
         #endregion PSF Updates
 

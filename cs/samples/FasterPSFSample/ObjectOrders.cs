@@ -55,7 +55,9 @@ namespace FasterPSFSample
                 => dst.Value = value;
 
             public void ReadCompletionCallback(ref Key key, ref Input<ObjectOrders> input, ref Output<ObjectOrders> output, Context<ObjectOrders> context, Status status)
-            { /* Output is not set by pending operations */ }
+            {
+                context.PendingResults.Add((status, key, output.Value));
+            }
             #endregion Read
 
             #region Upsert
@@ -76,7 +78,10 @@ namespace FasterPSFSample
             public bool NeedCopyUpdate(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value) => true;
 
             public void CopyUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders oldValue, ref ObjectOrders newValue)
-                => throw new NotImplementedException();
+            {
+                newValue = oldValue;
+                InPlaceUpdater(ref key, ref input, ref newValue);
+            }
 
             public void InitialUpdater(ref Key key, ref Input<ObjectOrders> input, ref ObjectOrders value)
                 => value = input.InitialUpdateValue;

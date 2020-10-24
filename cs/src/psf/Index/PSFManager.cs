@@ -114,30 +114,22 @@ namespace PSF.Index
             return Status.OK;
         }
 
+        internal ValueTask DeleteAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, PSFChangeTracker<TProviderData, TRecordId> changeTracker,
+                                       CancellationToken cancellationToken)
+            => WhenAll(this.psfGroups.Values.Select(group => group.DeleteAsync(psfSession.GetGroupSession(group), changeTracker, cancellationToken)));
+
         internal bool CompletePending(PSFIndexSession<TProviderData, TRecordId> psfSession, bool spinWait = false, bool spinWaitForCommit = false)
             // TODO parallelize group CompletePending
             => this.psfGroups.Values.Aggregate(true, (result, group) => group.CompletePending(psfSession.GetGroupSession(group), spinWait, spinWaitForCommit) && result);
 
-        internal async ValueTask CompletePendingAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, bool waitForCommit = false, CancellationToken cancellationToken = default)
-        {
-            foreach (var task in this.psfGroups.Values.Select(group => group.CompletePendingAsync(psfSession.GetGroupSession(group), waitForCommit, cancellationToken))
-                                                      .Where(task => !task.IsCompletedSuccessfully))
-                await task;
-        }
+        internal ValueTask CompletePendingAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, bool waitForCommit = false, CancellationToken cancellationToken = default) 
+            => WhenAll(this.psfGroups.Values.Select(group => group.CompletePendingAsync(psfSession.GetGroupSession(group), waitForCommit, cancellationToken)));
 
-        internal async ValueTask ReadyToCompletePendingAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, CancellationToken cancellationToken = default)
-        {
-            foreach (var task in this.psfGroups.Values.Select(group => group.ReadyToCompletePendingAsync(psfSession.GetGroupSession(group), cancellationToken))
-                                                      .Where(task => !task.IsCompletedSuccessfully))
-                await task;
-        }
+        internal ValueTask ReadyToCompletePendingAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, CancellationToken cancellationToken = default) 
+            => WhenAll(this.psfGroups.Values.Select(group => group.ReadyToCompletePendingAsync(psfSession.GetGroupSession(group), cancellationToken)));
 
-        internal async ValueTask WaitForCommitAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, CancellationToken cancellationToken = default)
-        {
-            foreach (var task in this.psfGroups.Values.Select(group => group.WaitForCommitAsync(psfSession.GetGroupSession(group), cancellationToken))
-                                                      .Where(task => !task.IsCompletedSuccessfully))
-                await task;
-        }
+        internal ValueTask WaitForCommitAsync(PSFIndexSession<TProviderData, TRecordId> psfSession, CancellationToken cancellationToken = default) 
+            => WhenAll(this.psfGroups.Values.Select(group => group.WaitForCommitAsync(psfSession.GetGroupSession(group), cancellationToken)));
 
         /// <summary>
         /// Obtains a list of registered PSF names organized by the groups defined in previous RegisterPSF calls.
@@ -774,10 +766,10 @@ namespace PSF.Index
         /// Flush logs for all <see cref="PSFGroup{TProviderData, TPSFKey, TRecordId}"/>s until their current tail (records are still retained in memory)
         /// </summary>
         /// <param name="wait">Synchronous wait for operation to complete</param>
-        public void FlushLogs(bool wait)
+        public void Flush(bool wait)
         {
             foreach (var group in this.psfGroups.Values)
-                group.FlushLog(wait);
+                group.Flush(wait);
         }
 
         /// <summary>
@@ -785,11 +777,11 @@ namespace PSF.Index
         /// </summary>
         /// <param name="wait">Synchronous wait for operation to complete</param>
         /// <returns>When wait is false, this tells whether the full eviction was successfully registered with FASTER</returns>
-        public void FlushAndEvictLogs(bool wait)
+        public void FlushAndEvict(bool wait)
         {
             foreach (var group in this.psfGroups.Values)
             {
-                group.FlushAndEvictLog(wait);
+                group.FlushAndEvict(wait);
             }
         }
 
@@ -797,10 +789,10 @@ namespace PSF.Index
         /// Delete logs for all <see cref="PSFGroup{TProviderData, TPSFKey, TRecordId}"/>s entirely from memory. Cannot allocate on the log
         /// after this point. This is a synchronous operation.
         /// </summary>
-        public void DisposeLogsFromMemory()
+        public void DisposeFromMemory()
         {
             foreach (var group in this.psfGroups.Values)
-                group.DisposeLogFromMemory();
+                group.DisposeFromMemory();
         }
         #endregion Log Operations
     }

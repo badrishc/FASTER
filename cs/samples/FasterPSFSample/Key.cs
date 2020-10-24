@@ -5,7 +5,7 @@ using FASTER.core;
 
 namespace FasterPSFSample
 {
-    public struct Key : IFasterEqualityComparer<Key>
+    public struct Key
     {
         // Note: int instead of long because we won't use enough values to overflow and having it a 
         // different length than TRecordId (which is long) makes sure the PSFValue offsetting is in sync.
@@ -13,12 +13,15 @@ namespace FasterPSFSample
 
         public Key(int id) => this.Id = id;
 
-        public long GetHashCode64(ref Key key) => Utility.GetHashCode(key.Id);
+        public (int, int, int, int) MemberTuple => FasterPSFSampleApp.keyDict.TryGetValue(this, out var orders) ? orders.MemberTuple : (-1, -2, -3, -4);
 
-        public bool Equals(ref Key k1, ref Key k2) => k1.Id == k2.Id;
+        public override string ToString() => this.MemberTuple.ToString();
 
-        public (int, int, int, int) MemberTuple => FasterPSFSampleApp.keyDict[this].MemberTuple;
+        public class Comparer : IFasterEqualityComparer<Key>
+        {
+            public long GetHashCode64(ref Key key) => Utility.GetHashCode(key.Id);
 
-        public override string ToString() => $"({this.MemberTuple})";
+            public bool Equals(ref Key k1, ref Key k2) => k1.Id == k2.Id;
+        }
     }
 }

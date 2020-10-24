@@ -60,14 +60,14 @@ namespace FasterPSFSample
                 await RunInitialInserts(fpsf);
                 CountBinKey.WantLastBin = true;
                 await RunReads(fpsf);
-                var ok = await QueryPSFsWithoutBoolOps(fpsf)
-                        && await QueryPSFsWithBoolOps(fpsf)
-                        && UpdateSizeByUpsert(fpsf)
-                        && await UpdateColorByRMW(fpsf)
-                        && UpdateCountByUpsert(fpsf)
-                        && await Delete(fpsf);
+                var ok = await QueryPSFsWithoutBoolOps(fpsf);
+                ok &= await QueryPSFsWithBoolOps(fpsf);
+                ok &= UpdateSizeByUpsert(fpsf);
+                ok &= await UpdateColorByRMW(fpsf);
+                ok &= UpdateCountByUpsert(fpsf);
+                ok &= await Delete(fpsf);
                 Console.WriteLine("--------------------------------------------------------");
-                Console.WriteLine($"Completed run: UseObjects {useObjectValue}, MultiGroup {useMultiGroups}, Async {useAsync}");
+                Console.WriteLine($"Completed run: UseObjects {useObjectValue}, MultiGroup {useMultiGroups}, Async {useAsync}, Flush {flushAndEvict}");
                 Console.WriteLine();
                 Console.Write("===>>> ");
                 Console.WriteLine(ok ? "Passed! All operations succeeded" : "*** Failed! *** One or more operations failed");
@@ -104,8 +104,9 @@ namespace FasterPSFSample
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
             var context = new Context<TValue>();
             var input = default(TInput);
+            int statusPending = 0;
 
-            for (int ii = 0; ii < UpsertCount; ii++)
+            for (int ii = 0; ii < UpsertCount; ++ii)
             {
                 // Leave the last value unassigned from each category (we'll use it to update later)
                 var key = new Key(Interlocked.Increment(ref nextId) - 1);
@@ -165,10 +166,11 @@ namespace FasterPSFSample
                 PsfTrace($"{value} |");
 
                 // Both Upsert and RMW do an insert when the key is not found.
+                var status = Status.OK;
                 if ((ii & 1) == 0)
                 {
                     // Note: there is no UpsertAsync().
-                    session.Upsert(ref key, ref value, context, serialNo);
+                    status = session.Upsert(ref key, ref value, context, serialNo);
                 }
                 else
                 {
@@ -176,13 +178,19 @@ namespace FasterPSFSample
                     if (useAsync)
                         (await session.RMWAsync(ref key, ref input, context)).Complete();
                     else
-                        session.RMW(ref key, ref input, context, serialNo);
+                        status = session.RMW(ref key, ref input, context);
+                }
+                if (status == Status.PENDING)
+                {
+                    ++statusPending;
                 }
             }
-            ++serialNo;
+
+            if (!useAsync)
+                session.CompletePending();
 
             initialSkippedLastBinCount = lastBinKeys.Count();
-            Console.WriteLine($"Upserted {UpsertCount} elements");
+            Console.WriteLine($"Inserted {UpsertCount} elements; {statusPending} pending");
         }
 
         private static void RemoveIfSkippedLastBinKey(ref Key key)
@@ -199,20 +207,22 @@ namespace FasterPSFSample
             where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>, new()
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
-            Console.WriteLine("Reading {0} random keys from FASTER", UpsertCount);
+            var readCount = UpsertCount * 2;
+            Console.WriteLine("Reading {0} random keys from FASTER", readCount);
+
+            FlushAndEvictIfRequested(fpsf);
+            // Alternative to .For to obtain a session, but uses the interface so is slightly slower.
+            using var session = fpsf.PSFFasterKV.NewPSFSession(new TFunctions());
 
             var rng = new Random(0);
             int statusPending = 0;
             var output = new TOutput();
             var input = default(TInput);
             var context = new Context<TValue>();
-            var readCount = UpsertCount * 2;
 
             var keys = keyDict.Keys.ToArray();
 
-            // Alternative to .For to obtain a session, but uses the interface so is slightly slower.
-            using var session = fpsf.PSFFasterKV.NewPSFSession(new TFunctions());
-            for (int i = 0; i < UpsertCount; i++)
+            for (int ii = 0; ii < 1; ++ii) // readCount; ++ii)
             {
                 var key = keys[rng.Next(keys.Length)];
                 var status = Status.OK;
@@ -222,16 +232,29 @@ namespace FasterPSFSample
                 }
                 else
                 {
-                    session.Read(ref key, ref input, ref output, context, serialNo);
+                    status = session.Read(ref key, ref input, ref output, context);
+                    if (status == Status.PENDING)
+                        ++statusPending;
                 }
 
                 if (status == Status.OK && output.Value.MemberTuple != key.MemberTuple)
-                    throw new Exception($"Error: Value does not match key in {nameof(RunReads)}");
+                    throw new SampleException($"Error: Value does not match key in {nameof(RunReads)}");
             }
-            ++serialNo;
 
             session.CompletePending(true);
-            Console.WriteLine($"Read {readCount} elements with {++statusPending} Pending");
+
+            foreach (var result in context.PendingResults)
+            {
+                if (result.status == Status.OK) {
+                    if (result.value.MemberTuple != result.key.MemberTuple)
+                        throw new SampleException($"Error: Value does not match key in {nameof(RunReads)} pending results");
+                } else
+                {
+                    throw new SampleException($"Error: Unexpected status {result.status} in {nameof(RunReads)} pending results");
+                }
+            }
+
+            Console.WriteLine($"Read {readCount} elements with {statusPending} Pending");
         }
 
         const string indent2 = "  ";
@@ -255,6 +278,17 @@ namespace FasterPSFSample
             return expectedCount == providerDatas.Length;
         }
 
+        private static void FlushAndEvictIfRequested<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
+            where TValue : IOrders, new()
+            where TInput : IInput<TValue>, new()
+            where TOutput : IOutput<TValue>, new()
+            where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>, new()
+            where TSerializer : BinaryObjectSerializer<TValue>, new()
+        {
+            if (flushAndEvict)
+                fpsf.PSFFasterKV.FlushAndEvict(wait: true);
+        }
+
         internal async static Task<bool> QueryPSFsWithoutBoolOps<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
             where TValue : IOrders, new()
             where TInput : IInput<TValue>, new()
@@ -265,7 +299,9 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Querying PSFs from FASTER with no boolean ops", UpsertCount);
 
+            FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
             FasterKVProviderData<Key, TValue>[] providerDatas = null;
             var ok = true;
 
@@ -306,6 +342,7 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Querying PSFs from FASTER with boolean ops", UpsertCount);
 
+            FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
             FasterKVProviderData<Key, TValue>[] providerDatas = null;
             var ok = true;
@@ -469,6 +506,7 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Updating Sizes via Upsert");
 
+            FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
 
             FasterKVProviderData<Key, TValue>[] GetSizeDatas(Constants.Size size)
@@ -508,7 +546,7 @@ namespace FasterPSFSample
             xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
             mediumDatas = GetSizeDatas(Constants.Size.Medium);
             bool ok = xxlDatas.Length == expected && mediumDatas.Length == 0;
-            WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XLarge));
+            WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XXLarge));
             WriteResult(isInitial: false, "Medium", 0, mediumDatas.Length, true);
             return ok;
         }
@@ -523,6 +561,7 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Updating Colors via RMW");
 
+            FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
 
             FasterKVProviderData<Key, TValue>[] GetColorDatas(Color color)
@@ -549,7 +588,8 @@ namespace FasterPSFSample
 
                 RemoveIfSkippedLastBinKey(ref providerData.GetKey());
             }
-            ++serialNo;
+
+            session.CompletePending(spinWait: true);
 
             purpleDatas = GetColorDatas(Color.Purple);
             blueDatas = GetColorDatas(Color.Blue);
@@ -569,6 +609,7 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Updating Counts via Upsert");
 
+            FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
 
             var bin7 = 7;
@@ -630,6 +671,7 @@ namespace FasterPSFSample
             Console.WriteLine();
             Console.WriteLine("Deleting Colors");
 
+            FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
 
             async Task<FasterKVProviderData<Key, TValue>[]> GetColorDatas(Color color)

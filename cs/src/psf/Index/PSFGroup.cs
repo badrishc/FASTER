@@ -236,8 +236,7 @@ namespace PSF.Index
             return phase switch
             {
                 PSFExecutePhase.Insert => session.PsfInsert(this.fkv, ref compositeKey.CastToFirstKeyPointerRefAsKeyRef(), ref value, ref input, ref context, lsn),
-                PSFExecutePhase.PostUpdate => session.PsfUpdate(this.fkv, ref changeTracker.GetGroupRef(groupOrdinal),
-                                                                ref value, ref input, ref context, lsn, changeTracker),
+                PSFExecutePhase.PostUpdate => session.PsfUpdate(this.fkv, ref changeTracker.GetGroupRef(groupOrdinal), ref value, ref input, ref context, lsn, changeTracker),
                 PSFExecutePhase.Delete => session.PsfDelete(this.fkv, ref compositeKey.CastToFirstKeyPointerRefAsKeyRef(), ref value, ref input, ref context, lsn),
                 _ => throw new PSFInternalErrorException("Unknown PSF execution Phase {phase}")
             };
@@ -251,6 +250,7 @@ namespace PSF.Index
             var status = this.ExecuteAndStore(sessionObj, providerData, recordId, phase, changeTracker);
             if (status == Status.PENDING)
                 await session.CompletePendingAsync(waitForCommit: false, cancellationToken);
+            // TODO handle Status.ERROR in ExecuteAsync
         }
 
         /// <inheritdoc/>
@@ -272,6 +272,11 @@ namespace PSF.Index
             {
                 // RMW did not find the record so did an insert. Go through Insert logic here.
                 return this.ExecuteAndStore(sessionObj, changeTracker.BeforeData, changeTracker.BeforeRecordId, PSFExecutePhase.Insert, changeTracker:null);
+            }
+
+            if (changeTracker.UpdateOp == UpdateOperation.Delete)
+            {
+                return this.Delete(sessionObj, changeTracker);
             }
 
             changeTracker.CachedBeforeLA = Constants.kInvalidAddress; // TODOcache: Find BeforeRecordId in IPUCache
@@ -305,6 +310,11 @@ namespace PSF.Index
             {
                 // RMW did not find the record so did an insert. Go through Insert logic here.
                 return this.ExecuteAsync(sessionObj, changeTracker.BeforeData, changeTracker.BeforeRecordId, PSFExecutePhase.Insert, changeTracker: null, cancellationToken);
+            }
+
+            if (changeTracker.UpdateOp == UpdateOperation.Delete)
+            {
+                return this.DeleteAsync(sessionObj, changeTracker, cancellationToken);
             }
 
             changeTracker.CachedBeforeLA = Constants.kInvalidAddress; // TODOcache: Find BeforeRecordId in IPUCache
@@ -341,6 +351,20 @@ namespace PSF.Index
                 // If the latter, we can bypass ExecuteAndStore's PSF-execute loop
             }
             return this.ExecuteAndStore(sessionObj, changeTracker.BeforeData, default, PSFExecutePhase.Delete, changeTracker);
+        }
+
+        /// <summary>
+        /// Delete the RecordId
+        /// </summary>
+        public ValueTask DeleteAsync(IDisposable sessionObj, PSFChangeTracker<TProviderData, TRecordId> changeTracker, CancellationToken cancellationToken)
+        {
+            changeTracker.CachedBeforeLA = Constants.kInvalidAddress; // TODOcache: Find BeforeRecordId in IPUCache
+            if (changeTracker.CachedBeforeLA != Constants.kInvalidAddress)
+            {
+                // TODOcache: Tombstone it, and possibly unlink; or just copy its keys into changeTracker.Before.
+                // If the latter, we can bypass ExecuteAndStore's PSF-execute loop
+            }
+            return this.ExecuteAsync(sessionObj, changeTracker.BeforeData, default, PSFExecutePhase.Delete, changeTracker, cancellationToken);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -381,7 +405,7 @@ namespace PSF.Index
                         session.CompletePending(spinWait: true);
                         if (context.Functions.Queue.Count == 0)
                         {
-                            Debug.Fail("RCC was not called");
+                            Debug.Fail("ReadCompletionCallback was not called");
                             yield break;
                         }
                         output = context.Functions.Queue.Dequeue();
@@ -515,13 +539,13 @@ namespace PSF.Index
 
 #region Log Operations
         /// <inheritdoc/>
-        public void FlushLog(bool wait) => this.fkv.Log.Flush(wait);
+        public void Flush(bool wait) => this.fkv.Log.Flush(wait);
 
         /// <inheritdoc/>
-        public void FlushAndEvictLog(bool wait) => this.fkv.Log.FlushAndEvict(wait);
+        public void FlushAndEvict(bool wait) => this.fkv.Log.FlushAndEvict(wait);
 
         /// <inheritdoc/>
-        public void DisposeLogFromMemory() => this.fkv.Log.DisposeFromMemory();
+        public void DisposeFromMemory() => this.fkv.Log.DisposeFromMemory();
 #endregion Log Operations
     }
 }

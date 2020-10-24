@@ -88,8 +88,9 @@ namespace PSF.Index
 #region Address manipulation
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long GetRecordAddressFromKeyPointerPhysicalAddress(long physicalAddress)
-            => physicalAddress - KeyPointer<TPSFKey>.CastFromPhysicalAddress(physicalAddress).OffsetToStartOfKeys - RecordInfo.GetLength();
+        public long GetRecordAddressFromKeyPointerAddress(long address)
+            // This just manipulates the offset, so works for both logicalAddress and physicalAddress.
+            => address - KeyPointer<TPSFKey>.CastFromPhysicalAddress(address).OffsetToStartOfKeys - RecordInfo.GetLength();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long GetRecordAddressFromValueRef(ref TRecordId valueRef)

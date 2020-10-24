@@ -10,11 +10,15 @@ namespace FasterPSFSample
         private static bool useObjectValue;
         private static bool useMultiGroups;
         private static bool useAsync;
+        private static bool flushAndEvict;
         private static bool verbose;
 
         const string ObjValuesArg = "--objValues";
         const string MultiGroupArg = "--multiGroup";
         const string AsyncArg = "--async";
+        const string FlushArg = "--flush";
+        const string VerboseArg = "-v";
+        const string HelpArg = "--help";
 
         static bool ParseArgs(string[] argv)
         {
@@ -26,6 +30,9 @@ namespace FasterPSFSample
                 Console.WriteLine($"    {ObjValuesArg}: Use objects instead of blittable Value; default is {useObjectValue}");
                 Console.WriteLine($"    {MultiGroupArg}: Put each PSF in a separate group; default is {useMultiGroups}");
                 Console.WriteLine($"    {AsyncArg}: Use Async operations on FasterKV; default is {useAsync}");
+                Console.WriteLine($"    {FlushArg}: FlushAndEvict before each operation on FasterKV; default is {useAsync}");
+                Console.WriteLine($"    {VerboseArg}: Verbose output (show each result set evaluation); default is {useAsync}");
+                Console.WriteLine($"    {HelpArg}, /?, or -?: Show this message");
                 Console.WriteLine();
                 if (!string.IsNullOrEmpty(message))
                 {
@@ -55,9 +62,14 @@ namespace FasterPSFSample
                     useAsync = true;
                     continue;
                 }
-                if (string.Compare(arg, "--help", ignoreCase: true) == 0 || arg == "/?" || arg == "-?")
+                if (string.Compare(arg, FlushArg, ignoreCase: true) == 0)
+                {
+                    flushAndEvict = true;
+                    continue;
+                }
+                if (string.Compare(arg, HelpArg, ignoreCase: true) == 0 || arg == "/?" || arg == "-?")
                     return Usage();
-                if (string.Compare(arg, "-v", ignoreCase: true) == 0)
+                if (string.Compare(arg, VerboseArg, ignoreCase: true) == 0)
                 {
                     verbose = true;
                     continue;

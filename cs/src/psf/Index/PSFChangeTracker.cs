@@ -12,7 +12,6 @@ namespace PSF.Index
 {
     public enum UpdateOperation
     {
-        AwaitPending,   // We don't know yet; will have to await the *CompletionCallback method to set it.
         Insert,
         IPU,
         RCU,
@@ -45,6 +44,7 @@ namespace PSF.Index
         #endregion Data API
 
         private GroupCompositeKeyPair[] groups;
+
         internal bool HasBeforeKeys { get; set; }
 
         internal long CachedBeforeLA = Constants.kInvalidAddress;

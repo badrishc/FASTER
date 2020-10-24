@@ -1,12 +1,13 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+using FASTER.core;
 using System.Collections.Generic;
 
 namespace FasterPSFSample
 {
     public class Context<TValue>
     {
-        public List<TValue> Value { get; set; } = new List<TValue>();
+        public List<(Status status, Key key, TValue value)> PendingResults { get; set; } = new List<(Status, Key, TValue)>();
     }
 }

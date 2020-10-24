@@ -180,22 +180,12 @@ namespace FASTER.core
         /// <summary>
         /// Commit tokens per session restored during Continue
         /// </summary>
-#if PSF_DLL
-        internal
-#else
-        public 
-#endif
-        ConcurrentDictionary<string, CommitPoint> continueTokens;
+        public ConcurrentDictionary<string, CommitPoint> continueTokens;
 
         /// <summary>
         /// Commit tokens per session created during Checkpoint
         /// </summary>
-#if PSF_DLL
-        internal
-#else
-        public 
-#endif
-        ConcurrentDictionary<string, CommitPoint> checkpointTokens;
+        public ConcurrentDictionary<string, CommitPoint> checkpointTokens;
 
         /// <summary>
         /// Object log segment offsets

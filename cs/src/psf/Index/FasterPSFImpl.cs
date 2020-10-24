@@ -101,7 +101,7 @@ namespace PSF.Index
                     // Note: we never have SkipKeyVerification in the PSF flavor of this Read.
 
                     // The comparer is called during AsyncGetFromDiskCallback with a ref to the beginning of the stored CompsiteKey, so match that here.
-                    var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                    var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(physicalAddress);
                     if (!comparer.Equals(ref queryKeyPointerRefAsKeyRef, ref hlog.GetKey(recordPhysicalAddress)))
                     {
                         logicalAddress = queryKeyPointer.PreviousAddress;
@@ -131,7 +131,7 @@ namespace PSF.Index
             // Mutable region (even fuzzy region is included here)
             if (logicalAddress >= hlog.SafeReadOnlyAddress)
             {
-                long recordPhysicalAddress = KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                long recordPhysicalAddress = KeyAccessor.GetRecordAddressFromKeyPointerAddress(physicalAddress);
                 pendingContext.recordInfo = hlog.GetInfo(recordPhysicalAddress);
                 if (pendingContext.recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
@@ -143,7 +143,7 @@ namespace PSF.Index
             // Immutable region
             else if (logicalAddress >= hlog.HeadAddress)
             {
-                long recordPhysicalAddress = KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                long recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(physicalAddress);
                 pendingContext.recordInfo = hlog.GetInfo(recordPhysicalAddress);
                 if (pendingContext.recordInfo.Tombstone)
                     return OperationStatus.NOTFOUND;
@@ -201,7 +201,7 @@ namespace PSF.Index
                 pendingContext.output = output;
                 pendingContext.userContext = context;
                 pendingContext.entry.word = entry.word;
-                pendingContext.logicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress);
+                pendingContext.logicalAddress = logicalAddress - queryKeyPointer.OffsetToStartOfKeys - RecordInfo.GetLength();
                 pendingContext.version = sessionCtx.version;
                 pendingContext.serialNum = lsn;
                 pendingContext.heldLatch = heldOperation;
@@ -226,7 +226,7 @@ namespace PSF.Index
                 foundPhysicalAddress = hlog.GetPhysicalAddress(foundLogicalAddress);
 
                 // The comparer is called during AsyncGetFromDiskCallback with a ref to the beginning of the stored CompsiteKey, so match that here.
-                var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(foundPhysicalAddress);
+                var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(foundPhysicalAddress);
                 if (comparer.Equals(ref keyPointer.Key, ref hlog.GetKey(recordPhysicalAddress)))
                     return true;
 
@@ -340,7 +340,7 @@ namespace PSF.Index
                         // Note that we do not backtrace here because we are not replacing the value at the key; 
                         // instead, we insert at the top of the hash chain. Track the latest record version we've seen.
                         long physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
-                        ref RecordInfo recordInfo = ref hlog.GetInfo(this.KeyAccessor.GetRecordAddressFromKeyPointerPhysicalAddress(physicalAddress));
+                        ref RecordInfo recordInfo = ref hlog.GetInfo(this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(physicalAddress));
                         ref KeyPointer<TPSFKey> prevKeyPointer = ref KeyPointer<TPSFKey>.CastFromPhysicalAddress(physicalAddress);
                         if (recordInfo.Tombstone || prevKeyPointer.IsDeleted)
                         {

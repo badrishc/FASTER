@@ -39,7 +39,7 @@ namespace PSF.Index
                 // Create a varlen CompositeKey with just one item. This is ONLY used as the query key to QueryPSF.
                 this.keyPointerMem = pool.Get(keyAccessor.KeyPointerSize);
                 ref KeyPointer<TPSFKey> keyPointer = ref Unsafe.AsRef<KeyPointer<TPSFKey>>(keyPointerMem.GetValidPointer());
-                keyPointer.Initialize(this.PsfOrdinal, ref key);
+                keyPointer.Initialize(this.PsfOrdinal, ref key, keyAccessor.KeyPointerSize);
             }
 
             /// <summary>

@@ -20,7 +20,6 @@ namespace FASTER.PSF
             private IHeapContainer<TKVKey> keyContainer;
             private IHeapContainer<TKVValue> valueContainer;
             internal long currentAddress;
-            internal RecordInfo recordInfo;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal void SetHeapContainers(IHeapContainer<TKVKey> kc, IHeapContainer<TKVValue> vc)
@@ -45,7 +44,6 @@ namespace FASTER.PSF
             {
                 other.DetachHeapContainers(out this.keyContainer, out this.valueContainer);
                 this.currentAddress = other.currentAddress;
-                this.recordInfo = other.recordInfo;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -67,12 +65,11 @@ namespace FASTER.PSF
         public class Context
         {
             internal Output output;
-            internal Status status;
+            internal Status PendingResultStatus;
             
             internal Context()
             {
-                this.output.recordInfo = default;
-                this.status = Status.OK;
+                this.PendingResultStatus = Status.OK;
             }
         }
 
@@ -100,15 +97,18 @@ namespace FASTER.PSF
 
         public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
         {
-            ctx.output.Set(ref output);
-            ctx.output.recordInfo = recordInfo;
-            ctx.status = status;
+            // If ctx is null, this was an async call, and we'll get output via Complete().
+            if (ctx is { })
+            {
+                ctx.output.Set(ref output);
+                ctx.PendingResultStatus = status;
+            }
         }
 
         #endregion Supported IFunctions operations
 
-        #region Unsupported IFunctions operations
-        const string errorMsg = "This IFunctions method should not be called in this context";
+        #region Unsupported IAdvancedFunctions operations
+        const string errorMsg = "This IAdvancedFunctions method should not be called in this context";
 
         public virtual bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
         public virtual void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
@@ -122,6 +122,6 @@ namespace FASTER.PSF
         public virtual void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx) => throw new PSFInternalErrorException(errorMsg);
         public virtual void DeleteCompletionCallback(ref TKVKey key, Context ctx) => throw new PSFInternalErrorException(errorMsg);
         public virtual void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) => throw new PSFInternalErrorException(errorMsg);
-        #endregion Unsupported IFunctions operations
+        #endregion Unsupported IAdvancedFunctions operations
     }
 }

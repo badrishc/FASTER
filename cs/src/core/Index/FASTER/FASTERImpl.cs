@@ -154,7 +154,7 @@ namespace FASTER.core
             }
             #endregion
 
-            if (sessionCtx.phase == Phase.PREPARE && !usePreviousAddress && GetLatestRecordVersion(ref entry, sessionCtx.version) > sessionCtx.version)
+            if (sessionCtx.phase == Phase.PREPARE && GetLatestRecordVersion(ref entry, sessionCtx.version) > sessionCtx.version)
             {
                 status = OperationStatus.CPR_SHIFT_DETECTED;
                 goto CreatePendingContext; // Pivot thread
@@ -443,13 +443,8 @@ namespace FASTER.core
                                true, false, false,
                                latestLogicalAddress);
                 hlog.ShallowCopy(ref key, ref hlog.GetKey(newPhysicalAddress));
-
-                // The old logicalAddress is invalid (LA < BeginAddress, so the record does not exist) or is on disk (LA < HeadAddress, which
-                // would require an IO to get it, so instead we defer to the liveness check in Read(..., ref previousAddress, ...), or was deleted,
-                // this is an insert; otherwise the old record was valid but not in the mutable range (that's handled above), but it's above
-                // HeadAddress, so we can get the old value and this is an RCU.
-                var oldAddress = (logicalAddress < hlog.HeadAddress || hlog.GetInfo(physicalAddress).Tombstone) ? Constants.kInvalidAddress : logicalAddress;
-                fasterSession.SingleWriter(ref key, ref value, ref hlog.GetValue(newPhysicalAddress), newLogicalAddress);
+                fasterSession.SingleWriter(ref key, ref value, 
+                                       ref hlog.GetValue(newPhysicalAddress), newLogicalAddress);
 
                 var updatedEntry = default(HashBucketEntry);
                 updatedEntry.Tag = tag;
@@ -1031,7 +1026,7 @@ namespace FASTER.core
                 hlog.GetInfo(physicalAddress).Tombstone = true;
 
                 // Write the default value (the RecordInfo obtained from logicalAddress carries the tombstone marker to identify this as a delete).
-                // Ignore the return value; the record is already marked
+                // Ignore the return value; the record is already marked. The callback can dereference logicalAddress to detect the Tombstone.
                 Value deletedValue = default;
                 fasterSession.ConcurrentWriter(ref hlog.GetKey(physicalAddress), ref deletedValue, ref hlog.GetValue(physicalAddress), logicalAddress);
 
@@ -1073,8 +1068,8 @@ namespace FASTER.core
                                latestLogicalAddress);
                 hlog.ShallowCopy(ref key, ref hlog.GetKey(newPhysicalAddress));
 
-                // Write the default value (the RecordInfo obtained from newLogicalAddress carries the tombstone marker to identify this as a delete).
-                fasterSession.SingleWriter(ref key, ref value, ref hlog.GetValue(newPhysicalAddress), newLogicalAddress);
+                // Note: for indexing, we don't have the old value available if this is < HeadAddress, and since it is < ReadOnlyAddress
+                // and we do not have a callback to handle passing a "deleted" flag, we do nothing here. TODOperf: Add callback if >= HeadAddress.
 
                 var updatedEntry = default(HashBucketEntry);
                 updatedEntry.Tag = tag;
@@ -1235,13 +1230,15 @@ namespace FASTER.core
 
             if (request.logicalAddress >= hlog.BeginAddress)
             {
-                ref RecordInfo recordInfo = ref hlog.GetInfoFromBytePointer(request.record.GetValidPointer());
-                Debug.Assert(recordInfo.Version <= ctx.version);
+                Debug.Assert(hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).Version <= ctx.version);
 
-                if (recordInfo.Tombstone)
+                if (hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                fasterSession.SingleReader(ref pendingContext.key.Get(), ref pendingContext.input.Get(),
+                // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
+                ref Key key = ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
+
+                fasterSession.SingleReader(ref key, ref pendingContext.input.Get(),
                                        ref hlog.GetContextRecordValue(ref request), ref pendingContext.output, request.logicalAddress);
 
                 if (CopyReadsToTail || UseReadCache)
@@ -1322,7 +1319,7 @@ namespace FASTER.core
                 BlockAllocateReadCache(recordSize, out newLogicalAddress, currentCtx, fasterSession);
                 newPhysicalAddress = readcache.GetPhysicalAddress(newLogicalAddress);
                 RecordInfo.WriteInfo(ref readcache.GetInfo(newPhysicalAddress), opCtx.version,
-                                    final:true, tombstone:false, invalidBit:false,
+                                    true, false, false,
                                     entry.Address);
                 readcache.ShallowCopy(ref pendingContext.key.Get(), ref readcache.GetKey(newPhysicalAddress));
                 fasterSession.SingleWriter(ref pendingContext.key.Get(),
@@ -1335,7 +1332,7 @@ namespace FASTER.core
                 BlockAllocate(recordSize, out newLogicalAddress, currentCtx, fasterSession);
                 newPhysicalAddress = hlog.GetPhysicalAddress(newLogicalAddress);
                 RecordInfo.WriteInfo(ref hlog.GetInfo(newPhysicalAddress), opCtx.version,
-                                   final:true, tombstone:false, invalidBit:false,
+                                   true, false, false,
                                    latestLogicalAddress);
                 hlog.ShallowCopy(ref pendingContext.key.Get(), ref hlog.GetKey(newPhysicalAddress));
                 fasterSession.SingleWriter(ref pendingContext.key.Get(),
@@ -1735,7 +1732,7 @@ namespace FASTER.core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected bool TraceBackForKeyMatch(
+        private bool TraceBackForKeyMatch(
                                     ref Key key,
                                     long fromLogicalAddress,
                                     long minOffset,

@@ -68,6 +68,7 @@ namespace PSF.Index
 
                 output.RecordId = value;
                 output.PreviousAddress = storedKeyPointer.PreviousAddress;
+                
                 output.IsDeleted = storedKeyPointer.IsDeleted;
 
 #if DEBUG

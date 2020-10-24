@@ -356,5 +356,37 @@ namespace FASTER.PSF
         public void Dispose() => this.fkv.Dispose();
 
         #endregion IFasterKV implementations
+
+        #region Flush implementations (LogAccessor is not available on PSFFasterKV)
+        /// <summary>
+        /// Flush log until current tail (records are still retained in memory)
+        /// </summary>
+        /// <param name="wait">Synchronous wait for operation to complete</param>
+        public void Flush(bool wait)
+        {
+            this.fkv.Log.Flush(wait);
+            this.psfManager.Flush(wait);
+        }
+
+        /// <summary>
+        /// Flush log and evict all records from memory
+        /// </summary>
+        /// <param name="wait">Wait for operation to complete</param>
+        public void FlushAndEvict(bool wait)
+        {
+            this.fkv.Log.FlushAndEvict(wait);
+            this.psfManager.FlushAndEvict(wait);
+        }
+
+        /// <summary>
+        /// Delete log entirely from memory. Cannot allocate on the log
+        /// after this point. This is a synchronous operation.
+        /// </summary>
+        public void DisposeFromMemory()
+        {
+            this.fkv.Log.DisposeFromMemory();
+            this.psfManager.DisposeFromMemory();
+        }
+        #endregion Flush implementations (LogAccessor is not available on PSFFasterKV)
     }
 }
