@@ -865,18 +865,21 @@ namespace FASTER.PSF
         {
             ThrowIfActive();
             Debug.Assert(sessionSupportAsync, NotAsyncSessionErr);
-            return this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
+            return this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), context, cancellationToken);
         }
 
         private async ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> CompleteRMWAsync(
                 ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> primaryFkvValueTask,
-                CancellationToken cancellationToken)
+                TContext context, CancellationToken cancellationToken)
         {
-            var rmwAsyncResult = await primaryFkvValueTask;
-            await this.psfSession.UpdateAsync(this.indexingFunctions.ChangeTracker, cancellationToken);
+            Status primaryFkvStatus = (await primaryFkvValueTask).Complete();
+
+            // Either the operation completed synchronously (indexingFunctions.ChangeTracker is not null) or RMWCompletionCallback should have been called exactly once.
+            Debug.Assert(indexingFunctions.ChangeTracker is {} || indexingFunctions.Queue.Count == 1);
+            await this.psfSession.UpdateAsync(indexingFunctions.ChangeTracker ?? indexingFunctions.Queue.Dequeue(), cancellationToken);
 
             // Map to unwrapped TFunctions type.
-            var result = new FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>(rmwAsyncResult.Complete(), default);
+            var result = new FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>(primaryFkvStatus, default);
             this.indexingFunctions.Clear();
             return result;
         }
@@ -892,7 +895,7 @@ namespace FASTER.PSF
         /// <param name="userContext"></param>
         /// <param name="serialNo"></param>
         /// <returns></returns>
-        public Status Delete(ref TKVKey key, TContext userContext, long serialNo)
+        public Status Delete(ref TKVKey key, TContext userContext = default, long serialNo = 0)
         {
             ThrowIfActive();
             var status = this.fkvSession.Delete(ref key, userContext, serialNo);
@@ -913,7 +916,7 @@ namespace FASTER.PSF
         /// <param name="userContext"></param>
         /// <param name="serialNo"></param>
         /// <returns></returns>
-        public Status Delete(TKVKey key, TContext userContext, long serialNo) => this.Delete(ref key, userContext, serialNo);
+        public Status Delete(TKVKey key, TContext userContext = default, long serialNo = 0) => this.Delete(ref key, userContext, serialNo);
 
         /// <summary>
         /// Get list of pending requests (for current session)

@@ -15,10 +15,11 @@ namespace FasterPSFSample
 
         internal string LogDir;
 
-        // Hash and log sized
+        // Hash and log sizes
         internal const int HashSizeBits = 20;
-        private const int MemorySizeBits = 15;
-        private const int PageSizeBits = 10;
+        private const int MemorySizeBits = 29;
+        private const int SegmentSizeBits = 25;
+        private const int PageSizeBits = 20;
 
         internal LogFiles(bool useObjectValue, bool useReadCache, int numPSFGroups)
         {
@@ -30,7 +31,7 @@ namespace FasterPSFSample
             if (useObjectValue)
                 this.objLog = Devices.CreateLogDevice(Path.Combine(this.LogDir, "hlog.obj.log"), deleteOnClose: true);
 
-            this.LogSettings = new LogSettings { LogDevice = log, MemorySizeBits = MemorySizeBits, PageSizeBits = PageSizeBits, ObjectLogDevice = objLog };
+            this.LogSettings = new LogSettings { LogDevice = log, MemorySizeBits = MemorySizeBits, SegmentSizeBits = SegmentSizeBits, PageSizeBits = PageSizeBits, ObjectLogDevice = objLog };
             if (useReadCache)
                 this.LogSettings.ReadCacheSettings = new ReadCacheSettings { MemorySizeBits = MemorySizeBits, PageSizeBits = PageSizeBits };
 
@@ -39,7 +40,7 @@ namespace FasterPSFSample
             for (var ii = 0; ii < numPSFGroups; ++ii)
             {
                 this.PSFDevices[ii] = Devices.CreateLogDevice(Path.Combine(this.LogDir, $"psfgroup_{ii}.hlog.log"), deleteOnClose: true);
-                this.PSFLogSettings[ii] = new LogSettings { LogDevice = this.PSFDevices[ii] };
+                this.PSFLogSettings[ii] = new LogSettings { LogDevice = this.PSFDevices[ii], MemorySizeBits = MemorySizeBits, SegmentSizeBits = SegmentSizeBits, PageSizeBits = PageSizeBits };
                 if (useReadCache)
                     this.PSFLogSettings[ii].ReadCacheSettings = new ReadCacheSettings { MemorySizeBits = MemorySizeBits, PageSizeBits = MemorySizeBits };
             }

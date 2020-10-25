@@ -72,10 +72,13 @@ namespace FasterPSFSample
             
             // Override some things.
             var regLogSettings = regSettings.LogSettings;
-            regLogSettings.PageSizeBits = 20;
-            regLogSettings.SegmentSizeBits = 25;
-            regLogSettings.MemorySizeBits = 29;
-            regLogSettings.CopyReadsToTail = false;    // TODO--test this in both primary and secondary FKV
+            regLogSettings.CopyReadsToTail = false;    // TODO--test this in primary FKV
+            if (!FasterPSFSampleApp.useMultiGroups)
+            {
+                regLogSettings.PageSizeBits += 1;
+                regLogSettings.SegmentSizeBits += 1;
+                regLogSettings.MemorySizeBits += 2;
+            }
             if (!(regLogSettings.ReadCacheSettings is null))
             {
                 regLogSettings.ReadCacheSettings.PageSizeBits = regLogSettings.PageSizeBits;

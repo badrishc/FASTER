@@ -10,7 +10,6 @@ namespace FasterPSFSample
         internal const int BinSize = 100;
         internal const int MaxOrders = BinSize * 10;
         internal const int LastBin = 9; // 0-based
-        internal static bool WantLastBin;
 
         public int Bin;
 
@@ -22,7 +21,7 @@ namespace FasterPSFSample
         {
             // Skip the last bin during initial inserts to illustrate not matching the PSF (returning null)
             bin = GetBin(numOrders);
-            return WantLastBin || bin < LastBin;
+            return bin < LastBin;
         }
 
         // Make the hashcode for this distinct from size enum values

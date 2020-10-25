@@ -222,7 +222,7 @@ namespace PSF.Index
                         StoreKeys(ref groupKeysPair.After, keyBytes, keyMemLen);
                         this.MarkChanges(ref groupKeysPair);
                         // TODOtest: In debug, for initial dev, follow chains to assert the values match what is in the record's compositeKey
-                        if (!groupKeysPair.HasChanges)
+                        if (!groupKeysPair.HasChanges && changeTracker.AfterRecordId.CompareTo(changeTracker.BeforeRecordId) == 0)
                             return Status.OK;
                     }
                 }

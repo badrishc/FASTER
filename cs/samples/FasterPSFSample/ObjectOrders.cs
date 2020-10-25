@@ -8,12 +8,13 @@ namespace FasterPSFSample
 {
     public class ObjectOrders : IOrders
     {
-        const int numValues = 3;
-        const int sizeOrd = 0;
-        const int colorOrd = 1;
-        const int countOrd = 2;
+        const int numValues = 4;
+        const int idOrd = 0;
+        const int sizeOrd = 1;
+        const int colorOrd = 2;
+        const int countOrd = 3;
 
-        public int Id { get; set; }
+        public int Id { get => values[idOrd]; set => values[idOrd] = value; }
 
         // Colors, strings, and enums are not blittable so we use int
         public int SizeInt { get => values[sizeOrd]; set => values[sizeOrd] = value;  }

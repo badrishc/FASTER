@@ -18,8 +18,7 @@ namespace FasterPSFSample
 {
     public partial class FasterPSFSampleApp
     {
-        private const int UpsertCount = 100;
-        private static int blueCount, mediumCount, bin7Count;
+        private static int blueCount, mediumCount, bin7Count, redCount;
         private static int intersectMediumBlueCount, unionMediumBlueCount;
         private static int intersectMediumBlue7Count, unionMediumBlue7Count;
         private static int unionMediumLargeCount, unionRedBlueCount;
@@ -27,12 +26,7 @@ namespace FasterPSFSample
         
         internal static Dictionary<Key, IOrders> keyDict = new Dictionary<Key, IOrders>();
 
-        internal static HashSet<Key> lastBinKeys = new HashSet<Key>();
-        private static int initialSkippedLastBinCount;
-
         private static int nextId = 1000000000;
-
-        internal static int serialNo;
 
         static async Task Main(string[] argv)
         {
@@ -56,9 +50,9 @@ namespace FasterPSFSample
             var fpsf = new FPSF<TValue, TInput, TOutput, TFunctions, TSerializer>(useObjectValue, useMultiGroups, useReadCache: false); // ReadCache and CopyReadsToTail are not supported for PSFs
             try
             {
-                CountBinKey.WantLastBin = false;
+                var sw = new Stopwatch();
+                sw.Start();
                 await RunInitialInserts(fpsf);
-                CountBinKey.WantLastBin = true;
                 await RunReads(fpsf);
                 var ok = await QueryPSFsWithoutBoolOps(fpsf);
                 ok &= await QueryPSFsWithBoolOps(fpsf);
@@ -66,8 +60,9 @@ namespace FasterPSFSample
                 ok &= await UpdateColorByRMW(fpsf);
                 ok &= UpdateCountByUpsert(fpsf);
                 ok &= await Delete(fpsf);
+                sw.Stop();
                 Console.WriteLine("--------------------------------------------------------");
-                Console.WriteLine($"Completed run: UseObjects {useObjectValue}, MultiGroup {useMultiGroups}, Async {useAsync}, Flush {flushAndEvict}");
+                Console.WriteLine($"===--- Completed run: UseObjects {useObjectValue}, MultiGroup {useMultiGroups}, Async {useAsync}, Flush {flushAndEvict}, time = {Trim(sw.Elapsed)}");
                 Console.WriteLine();
                 Console.Write("===>>> ");
                 Console.WriteLine(ok ? "Passed! All operations succeeded" : "*** Failed! *** One or more operations failed");
@@ -98,7 +93,7 @@ namespace FasterPSFSample
             where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>, new()
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
-            Console.WriteLine("Writing keys from 0 to {0} to FASTER", UpsertCount);
+            Console.WriteLine($"Writing keys from 0 to {keyCount:N0} to FASTER");
 
             var rng = new Random(13);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
@@ -106,7 +101,9 @@ namespace FasterPSFSample
             var input = default(TInput);
             int statusPending = 0;
 
-            for (int ii = 0; ii < UpsertCount; ++ii)
+            var sw = new Stopwatch();
+            sw.Start();
+            for (int ii = 0; ii < keyCount; ++ii)
             {
                 // Leave the last value unassigned from each category (we'll use it to update later)
                 var key = new Key(Interlocked.Increment(ref nextId) - 1);
@@ -138,11 +135,11 @@ namespace FasterPSFSample
                 }
                 if (isMedium)
                     ++mediumCount;
+                if (isRed)
+                    ++redCount;
 
                 if (isBin7) 
                     ++bin7Count;
-                else if (bin == CountBinKey.LastBin)
-                    lastBinKeys.Add(key);
 
                 if (isMedium || isBlue)
                     ++unionMediumBlueCount;
@@ -170,7 +167,7 @@ namespace FasterPSFSample
                 if ((ii & 1) == 0)
                 {
                     // Note: there is no UpsertAsync().
-                    status = session.Upsert(ref key, ref value, context, serialNo);
+                    status = session.Upsert(ref key, ref value, context);
                 }
                 else
                 {
@@ -189,15 +186,8 @@ namespace FasterPSFSample
             if (!useAsync)
                 session.CompletePending();
 
-            initialSkippedLastBinCount = lastBinKeys.Count();
-            Console.WriteLine($"Inserted {UpsertCount} elements; {statusPending} pending");
-        }
-
-        private static void RemoveIfSkippedLastBinKey(ref Key key)
-        {
-            // TODO: If we can do IPU in PSFs rather than RCU, we'll need to see what was actually updated.
-            if (!useMultiGroups)
-                lastBinKeys.Remove(key);
+            sw.Stop();
+            Console.WriteLine($"Inserted {keyCount:N0} elements; {statusPending:N0} pending, time = {Trim(sw.Elapsed)}");
         }
 
         internal async static Task RunReads<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -207,12 +197,15 @@ namespace FasterPSFSample
             where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>, new()
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
-            var readCount = UpsertCount * 2;
-            Console.WriteLine("Reading {0} random keys from FASTER", readCount);
+            var readCount = keyCount * 2;
+            Console.WriteLine($"Reading {readCount:N0} random keys from FASTER");
 
             FlushAndEvictIfRequested(fpsf);
             // Alternative to .For to obtain a session, but uses the interface so is slightly slower.
             using var session = fpsf.PSFFasterKV.NewPSFSession(new TFunctions());
+
+            var sw = new Stopwatch();
+            sw.Start();
 
             var rng = new Random(0);
             int statusPending = 0;
@@ -222,7 +215,7 @@ namespace FasterPSFSample
 
             var keys = keyDict.Keys.ToArray();
 
-            for (int ii = 0; ii < 1; ++ii) // readCount; ++ii)
+            for (int ii = 0; ii < readCount; ++ii)
             {
                 var key = keys[rng.Next(keys.Length)];
                 var status = Status.OK;
@@ -243,24 +236,25 @@ namespace FasterPSFSample
 
             session.CompletePending(true);
 
-            foreach (var result in context.PendingResults)
+            foreach (var (status, key, value) in context.PendingResults)
             {
-                if (result.status == Status.OK) {
-                    if (result.value.MemberTuple != result.key.MemberTuple)
+                if (status == Status.OK) {
+                    if (value.MemberTuple != key.MemberTuple)
                         throw new SampleException($"Error: Value does not match key in {nameof(RunReads)} pending results");
                 } else
                 {
-                    throw new SampleException($"Error: Unexpected status {result.status} in {nameof(RunReads)} pending results");
+                    throw new SampleException($"Error: Unexpected status {status} in {nameof(RunReads)} pending results");
                 }
             }
 
-            Console.WriteLine($"Read {readCount} elements with {statusPending} Pending");
+            sw.Stop();
+            Console.WriteLine($"Read {readCount:N0} random elements with {statusPending:N0} Pending, time = {Trim(sw.Elapsed)}");
         }
 
         const string indent2 = "  ";
         const string indent4 = "    ";
 
-        static bool VerifyProviderDatas<TValue>(FasterKVProviderData<Key, TValue>[] providerDatas, string name, int expectedCount)
+        static bool VerifyProviderDatas<TValue>(FasterKVProviderData<Key, TValue>[] providerDatas, string name, int expectedCount, ref long totalCount)
             where TValue : IOrders, new()
         {
             Console.Write($"{indent4}{name}: ");
@@ -275,6 +269,7 @@ namespace FasterPSFSample
             Console.WriteLine(providerDatas.Length == expectedCount
                               ? $"Passed: expected == actual ({expectedCount})"
                               : $"Failed: expected ({expectedCount}) != actual ({providerDatas.Length})");
+            totalCount += providerDatas.Length;
             return expectedCount == providerDatas.Length;
         }
 
@@ -289,6 +284,16 @@ namespace FasterPSFSample
                 fpsf.PSFFasterKV.FlushAndEvict(wait: true);
         }
 
+        private static string PassOrFail(bool ok) => ok ? "passed" : ">>> FAILED! <<<";
+
+        private static string Trim(TimeSpan ts) => ts.ToString(@"hh\:mm\:ss\.fff");
+
+        private static bool WriteStatus(string activity, bool ok, long count, Stopwatch sw)
+        {
+            Console.WriteLine($"{indent4}{activity} {PassOrFail(ok)}, {count:N0} records, time = {Trim(sw.Elapsed)}");
+            return ok;
+        }
+
         internal async static Task<bool> QueryPSFsWithoutBoolOps<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
             where TValue : IOrders, new()
             where TInput : IInput<TValue>, new()
@@ -297,13 +302,18 @@ namespace FasterPSFSample
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
             Console.WriteLine();
-            Console.WriteLine("Querying PSFs from FASTER with no boolean ops", UpsertCount);
+            const string activity = "Querying PSFs with no boolean ops";
+            Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
 
+            var sw = new Stopwatch();
+            sw.Start();
+
             FasterKVProviderData<Key, TValue>[] providerDatas = null;
             var ok = true;
+            long count = 0;
 
             async Task<FasterKVProviderData<Key, TValue>[]> RunQuery<TPSFKey>(IPSF psf, TPSFKey key) where TPSFKey : struct
                 => useAsync
@@ -313,23 +323,25 @@ namespace FasterPSFSample
             providerDatas = useMultiGroups
                                 ? await RunQuery(fpsf.SizePsf, new SizeKey(Constants.Size.Medium))
                                 : await RunQuery(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium));
-            ok &= VerifyProviderDatas(providerDatas, "Medium", mediumCount);
+            ok &= VerifyProviderDatas(providerDatas, "Medium", mediumCount, ref count);
             
             providerDatas = useMultiGroups
                                 ? await RunQuery(fpsf.ColorPsf, new ColorKey(Color.Blue))
                                 : await RunQuery(fpsf.CombinedColorPsf, new CombinedKey(Color.Blue));
-            ok &= VerifyProviderDatas(providerDatas, "Blue", blueCount);
+            ok &= VerifyProviderDatas(providerDatas, "Blue", blueCount, ref count);
 
             providerDatas = useMultiGroups
                                 ? await RunQuery(fpsf.CountBinPsf, new CountBinKey(7))
                                 : await RunQuery(fpsf.CombinedCountBinPsf, new CombinedKey(7));
-            ok &= VerifyProviderDatas(providerDatas, "Bin7", bin7Count);
+            ok &= VerifyProviderDatas(providerDatas, "Bin7", bin7Count, ref count);
 
             providerDatas = useMultiGroups
                                 ? await RunQuery(fpsf.CountBinPsf, new CountBinKey(CountBinKey.LastBin))
                                 : await RunQuery(fpsf.CombinedCountBinPsf, new CombinedKey(CountBinKey.LastBin));
-            ok &= VerifyProviderDatas(providerDatas, "LastBin", 0); // Insert skipped (returned null from the PSF) all that fall into the last bin
-            return ok;
+            ok &= VerifyProviderDatas(providerDatas, "LastBin", 0, ref count);  // Insert skipped (returned null from the PSF) all that fall into the last bin
+
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw);
         }
 
         internal async static Task<bool> QueryPSFsWithBoolOps<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -340,12 +352,18 @@ namespace FasterPSFSample
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
             Console.WriteLine();
-            Console.WriteLine("Querying PSFs from FASTER with boolean ops", UpsertCount);
+            const string activity = "Querying PSFs with boolean ops";
+            Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(fpsf);
-            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
+            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
+            var sw = new Stopwatch();
+            sw.Start();
+
             FasterKVProviderData<Key, TValue>[] providerDatas = null;
             var ok = true;
+            long count = 0;
 
             // Local functions can't be overloaded so make the name unique
             async Task<FasterKVProviderData<Key, TValue>[]> RunQuery2<TPSFKey1, TPSFKey2>(
@@ -399,99 +417,103 @@ namespace FasterPSFSample
             {
                 providerDatas = await RunQuery2(fpsf.SizePsf, new SizeKey(Constants.Size.Medium),
                                                fpsf.ColorPsf, new ColorKey(Color.Blue), (sz, cl) => sz && cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount, ref count);
                 providerDatas = await RunQuery2(fpsf.SizePsf, new SizeKey(Constants.Size.Medium),
                                                fpsf.ColorPsf, new ColorKey(Color.Blue), (sz, cl) => sz || cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlueCount), unionMediumBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlueCount), unionMediumBlueCount, ref count);
 
                 providerDatas = await RunQuery3(fpsf.SizePsf, new SizeKey(Constants.Size.Medium),
                                                 fpsf.ColorPsf, new ColorKey(Color.Blue),
                                                 fpsf.CountBinPsf, new CountBinKey(7), (sz, cl, ct) => sz && cl && ct);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlue7Count), intersectMediumBlue7Count);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlue7Count), intersectMediumBlue7Count, ref count);
                 providerDatas = await RunQuery3(fpsf.SizePsf, new SizeKey(Constants.Size.Medium),
                                                 fpsf.ColorPsf, new ColorKey(Color.Blue),
                                                 fpsf.CountBinPsf, new CountBinKey(7), (sz, cl, ct) => sz || cl || ct);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count, ref count);
 
                 providerDatas = await RunQuery1EnumKeys(fpsf.SizePsf, new[] { new SizeKey(Constants.Size.Medium), new SizeKey(Constants.Size.Large) });
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeCount), unionMediumLargeCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeCount), unionMediumLargeCount, ref count);
                 providerDatas = await RunQuery1EnumKeys(fpsf.ColorPsf, new[] { new ColorKey(Color.Blue), new ColorKey(Color.Red) });
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionRedBlueCount), unionRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionRedBlueCount), unionRedBlueCount, ref count);
 
                 providerDatas = await RunQuery2Vec(fpsf.SizePsf, new[] { new SizeKey(Constants.Size.Medium), new SizeKey(Constants.Size.Large) },
                                                  fpsf.ColorPsf, new[] { new ColorKey(Color.Blue), new ColorKey(Color.Red) }, (sz, cl) => sz && cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumLargeRedBlueCount), intersectMediumLargeRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumLargeRedBlueCount), intersectMediumLargeRedBlueCount, ref count);
                 providerDatas = await RunQuery2Vec(fpsf.SizePsf, new[] { new SizeKey(Constants.Size.Medium), new SizeKey(Constants.Size.Large) },
                                                  fpsf.ColorPsf, new[] { new ColorKey(Color.Blue), new ColorKey(Color.Red) }, (sz, cl) => sz || cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeRedBlueCount), unionMediumLargeRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeRedBlueCount), unionMediumLargeRedBlueCount, ref count);
             }
             else
             {
                 providerDatas = await RunQuery2(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium),
                                                fpsf.CombinedColorPsf, new CombinedKey(Color.Blue), (sz, cl) => sz && cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount, ref count);
                 providerDatas = await RunQuery1EnumTuple(new[] { (fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium) }.AsEnumerable()),
                                                          (fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue) }.AsEnumerable()) }, sz => sz[0] && sz[1]);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount, ref count);
                 // ---
                 providerDatas = await RunQuery2(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium),
                                                fpsf.CombinedColorPsf, new CombinedKey(Color.Blue), (sz, cl) => sz || cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlueCount), unionMediumBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlueCount), unionMediumBlueCount, ref count);
                 providerDatas = await RunQuery1EnumTuple(new[] { (fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium) }.AsEnumerable()),
                                                          (fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue) }.AsEnumerable()) }, sz => sz[0] || sz[1]);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlueCount), unionMediumBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlueCount), unionMediumBlueCount, ref count);
                 // ---
                 providerDatas = await RunQuery3(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium),
                                                 fpsf.CombinedColorPsf, new CombinedKey(Color.Blue),
                                                 fpsf.CombinedCountBinPsf, new CombinedKey(7), (sz, cl, ct) => sz && cl && ct);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlue7Count), intersectMediumBlue7Count);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlue7Count), intersectMediumBlue7Count, ref count);
                 providerDatas = await RunQuery1EnumTuple(new[] {(fpsf.CombinedSizePsf, new [] { new CombinedKey(Constants.Size.Medium) }.AsEnumerable()),
                                                          (fpsf.CombinedColorPsf, new [] { new CombinedKey(Color.Blue) }.AsEnumerable()),
                                                          (fpsf.CombinedCountBinPsf, new [] { new CombinedKey(7) }.AsEnumerable()) }, sz => sz[0] && sz[1] && sz[2]);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlue7Count), intersectMediumBlue7Count);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlue7Count), intersectMediumBlue7Count, ref count);
                 // ---
                 providerDatas = await RunQuery3(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium),
                                                 fpsf.CombinedColorPsf, new CombinedKey(Color.Blue),
                                                 fpsf.CombinedCountBinPsf, new CombinedKey(7), (sz, cl, ct) => sz || cl || ct);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count, ref count);
                 providerDatas = await RunQuery1EnumTuple(new[] {(fpsf.CombinedSizePsf, new [] { new CombinedKey(Constants.Size.Medium) }.AsEnumerable()),
                                                          (fpsf.CombinedColorPsf, new [] { new CombinedKey(Color.Blue) }.AsEnumerable()),
                                                          (fpsf.CombinedCountBinPsf, new [] { new CombinedKey(7) }.AsEnumerable()) }, sz => sz[0] || sz[1] || sz[2]);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count, ref count);
                 // ---
                 providerDatas = await RunQuery1EnumKeys(fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium), new CombinedKey(Constants.Size.Large) });
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeCount), unionMediumLargeCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeCount), unionMediumLargeCount, ref count);
                 providerDatas = await RunQuery1EnumKeys(fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue), new CombinedKey(Color.Red) });
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionRedBlueCount), unionRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionRedBlueCount), unionRedBlueCount, ref count);
                 // ---
                 providerDatas = await RunQuery2Vec(fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium), new CombinedKey(Constants.Size.Large) },
                                                  fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue), new CombinedKey(Color.Red) }, (sz, cl) => sz && cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumLargeRedBlueCount), intersectMediumLargeRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumLargeRedBlueCount), intersectMediumLargeRedBlueCount, ref count);
                 providerDatas = await RunQuery1EnumTuple(new[] {(fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium), new CombinedKey(Constants.Size.Large) }.AsEnumerable()),
                                                          (fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue), new CombinedKey(Color.Red) }.AsEnumerable())}, sz => sz[0] && sz[1]);
-                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumLargeRedBlueCount), intersectMediumLargeRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumLargeRedBlueCount), intersectMediumLargeRedBlueCount, ref count);
                 // ---
                 providerDatas = await RunQuery2Vec(fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium), new CombinedKey(Constants.Size.Large) },
                                                  fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue), new CombinedKey(Color.Red) }, (sz, cl) => sz || cl);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeRedBlueCount), unionMediumLargeRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeRedBlueCount), unionMediumLargeRedBlueCount, ref count);
                 providerDatas = await RunQuery1EnumTuple(new[] {(fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium), new CombinedKey(Constants.Size.Large) }.AsEnumerable()),
                                                          (fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue), new CombinedKey(Color.Red) }.AsEnumerable())}, sz => sz[0] || sz[1]);
-                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeRedBlueCount), unionMediumLargeRedBlueCount);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeRedBlueCount), unionMediumLargeRedBlueCount, ref count);
             }
 
-            return ok;
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw);
         }
 
-        private static void WriteResult(bool isInitial, string name, int expectedCount, int actualCount, bool allResultsMatch)
+        private static bool WriteResult(bool isInitial, string name, int expectedCount, int actualCount, bool allResultsMatch, ref long totalCount, bool isDelete = false)
         {
-            var tag = isInitial ? "Initial" : "Updated";
+            totalCount += actualCount;
+
+            var tag = isInitial ? "Initial" : (isDelete ? "Deleted" : "Updated");
             if (expectedCount == actualCount && allResultsMatch) { 
                 Console.WriteLine($"{indent4}{tag} {name} Passed: expected == actual ({expectedCount})");
-                return;
+                return true;
             }
             Console.WriteLine(expectedCount == actualCount
                                 ? $"{indent4}{tag} {name} Failed: expected == actual ({expectedCount}), but not all results matched"
                                 : $"{indent4}{tag} {name} Failed: expected ({expectedCount}) != actual ({actualCount})");
+            return false;
         }
 
         private static bool AllMatch<TValue>(FasterKVProviderData<Key, TValue>[] datas, Func<TValue, bool> pred) => datas.All(data => pred(data.GetValue()));
@@ -504,20 +526,26 @@ namespace FasterPSFSample
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
             Console.WriteLine();
-            Console.WriteLine("Updating Sizes via Upsert");
+            const string activity = "Updating Sizes via Upsert";
+            Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(fpsf);
-            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
+            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
+            var sw = new Stopwatch();
+            sw.Start();
 
             FasterKVProviderData<Key, TValue>[] GetSizeDatas(Constants.Size size)
                 => useMultiGroups
                     ? session.QueryPSF(fpsf.SizePsf, new SizeKey(size)).ToArray()
                     : session.QueryPSF(fpsf.CombinedSizePsf, new CombinedKey(size)).ToArray();
 
+            long count = 0;
+
             var xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
-            WriteResult(isInitial: true, "XXLarge", 0, xxlDatas.Length, true);
+            var ok = WriteResult(isInitial: true, "XXLarge", 0, xxlDatas.Length, true, ref count);
             var mediumDatas = GetSizeDatas(Constants.Size.Medium);
-            WriteResult(isInitial: true, "Medium", mediumCount, mediumDatas.Length, AllMatch(mediumDatas, val => val.SizeInt == (int)Constants.Size.Medium));
+            ok &= WriteResult(isInitial: true, "Medium", mediumCount, mediumDatas.Length, AllMatch(mediumDatas, val => val.SizeInt == (int)Constants.Size.Medium), ref count);
             var expected = mediumDatas.Length;
             Console.WriteLine($"{indent2}Changing all Medium to XXLarge");
 
@@ -537,18 +565,16 @@ namespace FasterPSFSample
                 };
 
                 // Reuse the same key. Note: there is no UpsertAsync().
-                session.Upsert(ref providerData.GetKey(), ref newValue, context, serialNo);
-
-                RemoveIfSkippedLastBinKey(ref providerData.GetKey());
+                session.Upsert(ref providerData.GetKey(), ref newValue, context);
             }
-            ++serialNo;
 
             xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
             mediumDatas = GetSizeDatas(Constants.Size.Medium);
-            bool ok = xxlDatas.Length == expected && mediumDatas.Length == 0;
-            WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XXLarge));
-            WriteResult(isInitial: false, "Medium", 0, mediumDatas.Length, true);
-            return ok;
+            ok &= WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XXLarge), ref count);
+            ok &= WriteResult(isInitial: false, "Medium", 0, mediumDatas.Length, true, ref count);
+
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw);
         }
 
         internal async static Task<bool> UpdateColorByRMW<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -559,20 +585,26 @@ namespace FasterPSFSample
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
             Console.WriteLine();
-            Console.WriteLine("Updating Colors via RMW");
+            const string activity = "Updating Colors via RMW";
+            Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
+            var sw = new Stopwatch();
+            sw.Start();
 
             FasterKVProviderData<Key, TValue>[] GetColorDatas(Color color)
                 => useMultiGroups
                     ? session.QueryPSF(fpsf.ColorPsf, new ColorKey(color)).ToArray()
                     : session.QueryPSF(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArray();
 
+            long count = 0;
+
             var purpleDatas = GetColorDatas(Color.Purple);
-            WriteResult(isInitial: true, "Purple", 0, purpleDatas.Length, true);
+            var ok = WriteResult(isInitial: true, "Purple", 0, purpleDatas.Length, true, ref count);
             var blueDatas = GetColorDatas(Color.Blue);
-            WriteResult(isInitial: true, "Blue", blueCount, blueDatas.Length, AllMatch(blueDatas, val => val.ColorArgb == Color.Blue.ToArgb()));
+            ok &= WriteResult(isInitial: true, "Blue", blueCount, blueDatas.Length, AllMatch(blueDatas, val => val.ColorArgb == Color.Blue.ToArgb()), ref count);
             var expected = blueDatas.Length;
             Console.WriteLine($"{indent2}Changing all Blue to Purple");
 
@@ -580,23 +612,22 @@ namespace FasterPSFSample
             var input = new TInput { IPUColorInt = Color.Purple.ToArgb() };
             foreach (var providerData in blueDatas)
             {
-                // This will call Functions<>.InPlaceUpdater.
+                // This will call Functions<>.InPlaceUpdater if !flushAndEvict, else CopyUpdater.
                 if (useAsync)
                     (await session.RMWAsync(ref providerData.GetKey(), ref input, context)).Complete();
                 else
-                    session.RMW(ref providerData.GetKey(), ref input, context, serialNo);
-
-                RemoveIfSkippedLastBinKey(ref providerData.GetKey());
+                    session.RMW(ref providerData.GetKey(), ref input, context);
             }
 
             session.CompletePending(spinWait: true);
 
             purpleDatas = GetColorDatas(Color.Purple);
             blueDatas = GetColorDatas(Color.Blue);
-            bool ok = purpleDatas.Length == expected && blueDatas.Length == 0;
-            WriteResult(isInitial: false, "Purple", expected, purpleDatas.Length, AllMatch(purpleDatas, val => val.ColorArgb == Color.Purple.ToArgb()));
-            WriteResult(isInitial: false, "Blue", 0, blueDatas.Length, true);
-            return ok;
+            ok &= WriteResult(isInitial: false, "Purple", expected, purpleDatas.Length, AllMatch(purpleDatas, val => val.ColorArgb == Color.Purple.ToArgb()), ref count);
+            ok &= WriteResult(isInitial: false, "Blue", 0, blueDatas.Length, true, ref count);
+
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw);
         }
 
         internal static bool UpdateCountByUpsert<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -607,10 +638,14 @@ namespace FasterPSFSample
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
             Console.WriteLine();
-            Console.WriteLine("Updating Counts via Upsert");
+            const string activity = "Updating Counts via Upsert";
+            Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(fpsf);
-            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
+            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
+            var sw = new Stopwatch();
+            sw.Start();
 
             var bin7 = 7;
             FasterKVProviderData<Key, TValue>[] GetCountDatas(int bin)
@@ -618,15 +653,14 @@ namespace FasterPSFSample
                     ? session.QueryPSF(fpsf.CountBinPsf, new CountBinKey(bin)).ToArray()
                     : session.QueryPSF(fpsf.CombinedCountBinPsf, new CombinedKey(bin)).ToArray();
 
+            long count = 0;
+
             // First show we've nothing in the last bin, and get all in bin7.
             var lastBinDatas = GetCountDatas(CountBinKey.LastBin);
-            int expectedLastBinCount = initialSkippedLastBinCount - lastBinKeys.Count();
-            var ok = lastBinDatas.Length == expectedLastBinCount;
-            WriteResult(isInitial: true, "LastBin", expectedLastBinCount, lastBinDatas.Length, AllMatch(lastBinDatas, val => CountBinKey.GetBin(val.Count) == CountBinKey.LastBin));
+            var ok = WriteResult(isInitial: true, "LastBin", 0, lastBinDatas.Length, true, ref count);
 
             var bin7Datas = GetCountDatas(bin7);
-            ok &= bin7Datas.Length == bin7Count;
-            WriteResult(isInitial: true, "Bin7", bin7Count, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7));
+            ok &= WriteResult(isInitial: true, "Bin7", bin7Count, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7), ref count);
 
             Console.WriteLine($"{indent2}Changing all Bin7 to LastBin");
             var context = new Context<TValue>();
@@ -643,22 +677,20 @@ namespace FasterPSFSample
                     ColorArgb = providerData.GetValue().ColorArgb,
                     Count = providerData.GetValue().Count + (CountBinKey.LastBin - bin7) * CountBinKey.BinSize // updated
                 };
-                Debug.Assert(CountBinKey.GetAndVerifyBin(newValue.Count, out tempBin) && tempBin == CountBinKey.LastBin);
+                Debug.Assert(!CountBinKey.GetAndVerifyBin(newValue.Count, out tempBin) && tempBin == CountBinKey.LastBin);
 
                 // Reuse the same key. Note: there is no UpsertAsync().
-                session.Upsert(ref providerData.GetKey(), ref newValue, context, serialNo);
+                session.Upsert(ref providerData.GetKey(), ref newValue, context);
             }
-            ++serialNo;
 
-            expectedLastBinCount += bin7Datas.Length;
             lastBinDatas = GetCountDatas(CountBinKey.LastBin);
-            ok &= lastBinDatas.Length == expectedLastBinCount;
-            WriteResult(isInitial: false, "LastBin", expectedLastBinCount, lastBinDatas.Length, AllMatch(lastBinDatas, val => CountBinKey.GetBin(val.Count) == CountBinKey.LastBin));
+            ok &= WriteResult(isInitial: false, "LastBin", 0, lastBinDatas.Length, true, ref count);
 
             bin7Datas = GetCountDatas(bin7);
-            ok &= bin7Datas.Length == 0;
-            WriteResult(isInitial: false, "Bin7", 0, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7));
-            return ok;
+            ok &= WriteResult(isInitial: false, "Bin7", 0, bin7Datas.Length, true, ref count);
+
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw);
         }
 
         internal async static Task<bool> Delete<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -669,10 +701,14 @@ namespace FasterPSFSample
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
             Console.WriteLine();
-            Console.WriteLine("Deleting Colors");
+            const string activity = "Deleting Colors";
+            Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(fpsf);
-            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>(new TFunctions());
+            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
+            var sw = new Stopwatch();
+            sw.Start();
 
             async Task<FasterKVProviderData<Key, TValue>[]> GetColorDatas(Color color)
                 => useMultiGroups
@@ -683,24 +719,23 @@ namespace FasterPSFSample
                         ? await session.QueryPSFAsync(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArrayAsync()
                         : session.QueryPSF(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArray();
 
+            long count = 0;
+
             var redDatas = await GetColorDatas(Color.Red);
-            Console.WriteLine();
-            Console.Write($"Deleting all Reds; initial count {redDatas.Length}");
+            var ok = WriteResult(isInitial: true, "Red", redCount, redDatas.Length, AllMatch(redDatas, val => val.ColorArgb == Color.Red.ToArgb()), ref count);
 
             var context = new Context<TValue>();
             foreach (var providerData in redDatas)
             {
                 // This will call Functions<>.InPlaceUpdater. Note: there is no DeleteAsync().
-                session.Delete(ref providerData.GetKey(), context, serialNo);
+                session.Delete(ref providerData.GetKey(), context);
             }
-            ++serialNo;
-            Console.WriteLine();
 
             redDatas = await GetColorDatas(Color.Red);
-            var ok = redDatas.Length == 0;
-            Console.Write(ok ? "Passed" : "*** Failed *** ");
-            Console.WriteLine($": Red {redDatas.Length}");
-            return ok;
+            ok &= WriteResult(isInitial: false, "Red", 0, redDatas.Length, true, ref count, isDelete: true);
+
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw);
         }
     }
 }

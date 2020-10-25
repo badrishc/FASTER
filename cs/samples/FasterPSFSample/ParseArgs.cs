@@ -8,15 +8,18 @@ namespace FasterPSFSample
     public partial class FasterPSFSampleApp
     {
         private static bool useObjectValue;
-        private static bool useMultiGroups;
+        internal static bool useMultiGroups;
         private static bool useAsync;
         private static bool flushAndEvict;
+        private static int keyCount = 1000;
         private static bool verbose;
 
         const string ObjValuesArg = "--objValues";
         const string MultiGroupArg = "--multiGroup";
         const string AsyncArg = "--async";
         const string FlushArg = "--flush";
+        const string KeysArg = "--keys";
+
         const string VerboseArg = "-v";
         const string HelpArg = "--help";
 
@@ -31,6 +34,7 @@ namespace FasterPSFSample
                 Console.WriteLine($"    {MultiGroupArg}: Put each PSF in a separate group; default is {useMultiGroups}");
                 Console.WriteLine($"    {AsyncArg}: Use Async operations on FasterKV; default is {useAsync}");
                 Console.WriteLine($"    {FlushArg}: FlushAndEvict before each operation on FasterKV; default is {useAsync}");
+                Console.WriteLine($"    {KeysArg}: Number of keys for initial insert; default is {keyCount}");
                 Console.WriteLine($"    {VerboseArg}: Verbose output (show each result set evaluation); default is {useAsync}");
                 Console.WriteLine($"    {HelpArg}, /?, or -?: Show this message");
                 Console.WriteLine();
@@ -67,13 +71,29 @@ namespace FasterPSFSample
                     flushAndEvict = true;
                     continue;
                 }
-                if (string.Compare(arg, HelpArg, ignoreCase: true) == 0 || arg == "/?" || arg == "-?")
-                    return Usage();
+                if (string.Compare(arg, KeysArg, ignoreCase: true) == 0)
+                {
+                    if (ii > argv.Length - 1)
+                    {
+                        Console.WriteLine($"{arg}: requires a count argument");
+                        return false;
+                    }
+                    var arg1 = argv[ii + 1];
+                    if (!int.TryParse(arg1, out keyCount))
+                    {
+                        Console.WriteLine($"{arg}: requires a count argument; {arg1} is invalid");
+                        return false;
+                    }
+                    ++ii;
+                    continue;
+                }
                 if (string.Compare(arg, VerboseArg, ignoreCase: true) == 0)
                 {
                     verbose = true;
                     continue;
                 }
+                if (string.Compare(arg, HelpArg, ignoreCase: true) == 0 || arg == "/?" || arg == "-?")
+                    return Usage();
                 return Usage($"Unknown argument: {arg}");
             }
             return true;
