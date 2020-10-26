@@ -24,6 +24,7 @@ namespace FASTER.PSF
         private readonly AdvancedClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions>> fkvSession;
         private readonly bool sessionSupportAsync;
         private readonly LogAccessor<TKVKey, TKVValue> fkvLogAccessor;
+        private readonly RecordAccessor<TKVKey, TKVValue> fkvRecordAccessor;
         private readonly IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> indexingFunctions;
 
         private readonly AdvancedClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context,
@@ -33,7 +34,7 @@ namespace FASTER.PSF
 
         internal const string NotAsyncSessionErr = "Session does not support async operations";
 
-        internal PSFClientSession(LogAccessor<TKVKey, TKVValue> logAccessor,
+        internal PSFClientSession(LogAccessor<TKVKey, TKVValue> logAccessor, RecordAccessor<TKVKey, TKVValue> recordAccessor,
                                   IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> indexingFunctions,
                                   AdvancedClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions>> session, bool sessionSupportAsync,
                                   AdvancedClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context,
@@ -41,6 +42,7 @@ namespace FASTER.PSF
                                   PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager)
         {
             this.fkvLogAccessor = logAccessor;
+            this.fkvRecordAccessor = recordAccessor;
             this.fkvSession = session;
             this.sessionSupportAsync = sessionSupportAsync;
             this.indexingFunctions = indexingFunctions;
@@ -73,22 +75,33 @@ namespace FASTER.PSF
                 if (status != Status.OK)
                     return null;
 
-                // Now prepare to confirm liveness: Look up the key and see if the address matches (it must be the highest address for the key).
+                // Now prepare to confirm liveness: Look up the key and see if the address matches (it must be the highest non-readCache address for the key).
                 // Setting input.LogAccessor to null switches Concurrent/SingleReader mode from "get the key and value at this address" to "traverse the liveness chain".
                 input.logAccessor = null;
- 
-                status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, context);
-                if (status == Status.PENDING)
+                RecordInfo recordInfo = default;
+
+                while (true)
                 {
-                    this.fkvLivenessSession.CompletePending(spinWait: true);
-                    status = context.PendingResultStatus;
+                    status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, ref recordInfo, context);
+                    if (status == Status.PENDING)
+                    {
+                        this.fkvLivenessSession.CompletePending(spinWait: true);
+                        status = context.PendingResultStatus;
+                    }
+
+                    if (status != Status.OK)
+                        return null;
+                    if (this.fkvRecordAccessor.IsReadCacheAddress(context.output.currentAddress))
+                    {
+                        recordInfo.PreviousAddress = context.output.currentAddress;
+                        continue;
+                    }
+                    if (context.output.currentAddress != logicalAddress)
+                        return null;
+
+                    context.output.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
+                    return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
                 }
-
-                if (status != Status.OK || context.output.currentAddress != logicalAddress)
-                    return null;
-
-                context.output.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
-                return new FasterKVProviderData<TKVKey, TKVValue>(keyContainer, valueContainer);
             }
             finally
             {
@@ -120,7 +133,7 @@ namespace FASTER.PSF
                 if (status != Status.OK)
                     return null;
 
-                // Now prepare to confirm liveness: Look up the key and see if the address matches (it must be the highest address for the key).
+                // Now prepare to confirm liveness: Look up the key and see if the address matches (it must be the highest non-readCache address for the key).
                 // Setting input.LogAccessor to null switches Concurrent/SingleReader mode from "get the key and value at this address" to "traverse the liveness chain".
                 input.logAccessor = null;
                 RecordInfo recordInfo = default;
@@ -132,6 +145,16 @@ namespace FASTER.PSF
                         return null;
                     LivenessFunctions<TKVKey, TKVValue>.Output output = default;
                     (status, output) = readAsyncResult.Complete(out recordInfo);
+
+                    if (status != Status.OK)
+                        return null;
+                    if (this.fkvRecordAccessor.IsReadCacheAddress(output.currentAddress))
+                    {
+                        recordInfo.PreviousAddress = output.currentAddress;
+                        continue;
+                    }
+                    if (output.currentAddress != logicalAddress)
+                        return null;
 
                     if (status != Status.OK || output.currentAddress != logicalAddress)
                         return null;

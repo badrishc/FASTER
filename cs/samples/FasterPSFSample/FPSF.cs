@@ -23,17 +23,17 @@ namespace FasterPSFSample
         internal IPSF SizePsf, ColorPsf, CountBinPsf;
         internal IPSF CombinedSizePsf, CombinedColorPsf, CombinedCountBinPsf;
 
-        internal FPSF(bool useObjectValues, bool useMultiGroup, bool useReadCache)
+        internal FPSF()
         {
-            this.logFiles = new LogFiles(useObjectValues, useReadCache, useMultiGroup ? 3 : 1);
+            this.logFiles = new LogFiles(FasterPSFSampleApp.useMultiGroups ? 3 : 1);
 
             this.PSFFasterKV = new PSFFasterKV<Key, TValue>(
                                 1L << 20, this.logFiles.LogSettings,
                                 null, // TODO: add checkpoints
-                                useObjectValues ? new SerializerSettings<Key, TValue> { valueSerializer = () => new TSerializer() } : null,
+                                FasterPSFSampleApp.useObjectValues ? new SerializerSettings<Key, TValue> { valueSerializer = () => new TSerializer() } : null,
                                 new Key.Comparer());
 
-            if (useMultiGroup)
+            if (FasterPSFSampleApp.useMultiGroups)
             {
                 var groupOrdinal = 0;
                 this.SizePsf = PSFFasterKV.RegisterPSF(CreatePSFRegistrationSettings<SizeKey>(groupOrdinal++), nameof(this.SizePsf),
@@ -72,7 +72,6 @@ namespace FasterPSFSample
             
             // Override some things.
             var regLogSettings = regSettings.LogSettings;
-            regLogSettings.CopyReadsToTail = false;    // TODO--test this in primary FKV
             if (!FasterPSFSampleApp.useMultiGroups)
             {
                 regLogSettings.PageSizeBits += 1;

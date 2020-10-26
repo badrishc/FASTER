@@ -67,11 +67,10 @@ namespace FASTER.PSF
 
             // In all non-readcache cases, the record should be in memory, and we do an insert via the fast path (without changetracker).
             Debug.Assert(this.recordAccessor.IsInMemory(logicalAddress));
-            {
-                // This is an update, but because we do not have the old logicalAddress we cannot RCU; instead we must simply insert a new record, using the fast path.
-                this.LogicalAddress = logicalAddress;
-                return;
-            }
+
+            // This is an update, but because we do not have the old logicalAddress we cannot RCU; instead we must simply insert a new record, using the fast path.
+            this.LogicalAddress = logicalAddress;
+            return;
         }
 
         public bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)

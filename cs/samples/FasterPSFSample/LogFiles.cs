@@ -21,19 +21,26 @@ namespace FasterPSFSample
         private const int SegmentSizeBits = 25;
         private const int PageSizeBits = 20;
 
-        internal LogFiles(bool useObjectValue, bool useReadCache, int numPSFGroups)
+        internal LogFiles(int numPSFGroups)
         {
             this.LogDir = Path.Combine(Path.GetTempPath(), "FasterPSFSample");
 
             // Create files for storing data. We only use one write thread to avoid disk contention.
             // We set deleteOnClose to true, so logs will auto-delete on completion.
             this.log = Devices.CreateLogDevice(Path.Combine(this.LogDir, "hlog.log"), deleteOnClose: true);
-            if (useObjectValue)
+            if (FasterPSFSampleApp.useObjectValues)
                 this.objLog = Devices.CreateLogDevice(Path.Combine(this.LogDir, "hlog.obj.log"), deleteOnClose: true);
 
-            this.LogSettings = new LogSettings { LogDevice = log, MemorySizeBits = MemorySizeBits, SegmentSizeBits = SegmentSizeBits, PageSizeBits = PageSizeBits, ObjectLogDevice = objLog };
-            if (useReadCache)
-                this.LogSettings.ReadCacheSettings = new ReadCacheSettings { MemorySizeBits = MemorySizeBits, PageSizeBits = PageSizeBits };
+            this.LogSettings = new LogSettings 
+            {
+                LogDevice = log,
+                ObjectLogDevice = objLog,
+                MemorySizeBits = MemorySizeBits,
+                SegmentSizeBits = SegmentSizeBits,
+                PageSizeBits = PageSizeBits,
+                CopyReadsToTail = FasterPSFSampleApp.copyReadsToTail,
+                ReadCacheSettings = FasterPSFSampleApp.useReadCache ? new ReadCacheSettings { MemorySizeBits = MemorySizeBits, PageSizeBits = PageSizeBits } : null
+            };
 
             this.PSFDevices = new IDevice[numPSFGroups];
             this.PSFLogSettings = new LogSettings[numPSFGroups];
@@ -41,8 +48,7 @@ namespace FasterPSFSample
             {
                 this.PSFDevices[ii] = Devices.CreateLogDevice(Path.Combine(this.LogDir, $"psfgroup_{ii}.hlog.log"), deleteOnClose: true);
                 this.PSFLogSettings[ii] = new LogSettings { LogDevice = this.PSFDevices[ii], MemorySizeBits = MemorySizeBits, SegmentSizeBits = SegmentSizeBits, PageSizeBits = PageSizeBits };
-                if (useReadCache)
-                    this.PSFLogSettings[ii].ReadCacheSettings = new ReadCacheSettings { MemorySizeBits = MemorySizeBits, PageSizeBits = MemorySizeBits };
+                // Note: ReadCache and CopyReadsToTail are not supported in PSF FKVs
             }
         }
 

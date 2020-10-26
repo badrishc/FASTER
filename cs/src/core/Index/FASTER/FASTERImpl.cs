@@ -120,7 +120,7 @@ namespace FASTER.core
                         }
 
                         // This is not called when looking up by address, so we do not set pendingContext.recordInfo.
-                        fasterSession.SingleReader(ref key, ref input, ref readcache.GetValue(physicalAddress), ref output, Constants.kInvalidAddress);
+                        fasterSession.SingleReader(ref key, ref input, ref readcache.GetValue(physicalAddress), ref output, logicalAddress);
                         return OperationStatus.SUCCESS;
                     }
                 }
@@ -1276,7 +1276,10 @@ namespace FASTER.core
             var logicalAddress = Constants.kInvalidAddress;
             var physicalAddress = default(long);
 
-            var hash = comparer.GetHashCode64(ref pendingContext.key.Get());
+            // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
+            ref Key key = ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
+
+            var hash = comparer.GetHashCode64(ref key);
             var tag = (ushort)((ulong)hash >> Constants.kHashTagShift);
 
 #region Trace back record in in-memory HybridLog
@@ -1291,10 +1294,10 @@ namespace FASTER.core
             if (logicalAddress >= hlog.HeadAddress)
             {
                 physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
-                if (!comparer.Equals(ref pendingContext.key.Get(), ref hlog.GetKey(physicalAddress)))
+                if (!comparer.Equals(ref key, ref hlog.GetKey(physicalAddress)))
                 {
                     logicalAddress = hlog.GetInfo(physicalAddress).PreviousAddress;
-                    TraceBackForKeyMatch(ref pendingContext.key.Get(),
+                    TraceBackForKeyMatch(ref key,
                                             logicalAddress,
                                             hlog.HeadAddress,
                                             out logicalAddress,
@@ -1321,11 +1324,11 @@ namespace FASTER.core
                 RecordInfo.WriteInfo(ref readcache.GetInfo(newPhysicalAddress), opCtx.version,
                                     true, false, false,
                                     entry.Address);
-                readcache.ShallowCopy(ref pendingContext.key.Get(), ref readcache.GetKey(newPhysicalAddress));
-                fasterSession.SingleWriter(ref pendingContext.key.Get(),
+                readcache.ShallowCopy(ref key, ref readcache.GetKey(newPhysicalAddress));
+                fasterSession.SingleWriter(ref key,
                                        ref hlog.GetContextRecordValue(ref request),
                                        ref readcache.GetValue(newPhysicalAddress),
-                                       newLogicalAddress);
+                                       newLogicalAddress | Constants.kReadCacheBitMask);
             }
             else
             {
@@ -1334,8 +1337,8 @@ namespace FASTER.core
                 RecordInfo.WriteInfo(ref hlog.GetInfo(newPhysicalAddress), opCtx.version,
                                    true, false, false,
                                    latestLogicalAddress);
-                hlog.ShallowCopy(ref pendingContext.key.Get(), ref hlog.GetKey(newPhysicalAddress));
-                fasterSession.SingleWriter(ref pendingContext.key.Get(),
+                hlog.ShallowCopy(ref key, ref hlog.GetKey(newPhysicalAddress));
+                fasterSession.SingleWriter(ref key,
                                        ref hlog.GetContextRecordValue(ref request),
                                        ref hlog.GetValue(newPhysicalAddress),
                                        newLogicalAddress);

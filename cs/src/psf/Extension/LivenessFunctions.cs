@@ -3,6 +3,7 @@
 
 using FASTER.core;
 using PSF.Index;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace FASTER.PSF
@@ -73,6 +74,10 @@ namespace FASTER.PSF
             }
         }
 
+        private readonly FasterKV<TKVKey, TKVValue> fkv;
+
+        internal LivenessFunctions(FasterKV<TKVKey, TKVValue> fkv) => this.fkv = fkv;
+
         #region Supported IFunctions operations
 
         public virtual void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
@@ -98,11 +103,17 @@ namespace FASTER.PSF
         public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
         {
             // If ctx is null, this was an async call, and we'll get output via Complete().
-            if (ctx is { })
+            if (ctx is {})
             {
                 ctx.output.Set(ref output);
                 ctx.PendingResultStatus = status;
             }
+        }
+
+        public virtual void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)
+        {
+            // This is called when the primary FKV copies reads from IO to the read cache or tail of the log.
+            this.fkv.hlog.ShallowCopy(ref src, ref dst);
         }
 
         #endregion Supported IFunctions operations
@@ -111,7 +122,6 @@ namespace FASTER.PSF
         const string errorMsg = "This IAdvancedFunctions method should not be called in this context";
 
         public virtual bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
-        public virtual void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
 
         public virtual void InitialUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new PSFInternalErrorException(errorMsg);
         public virtual bool NeedCopyUpdate(ref TKVKey key, ref Input input, ref TKVValue value) => throw new PSFInternalErrorException(errorMsg);

@@ -33,7 +33,7 @@ namespace FasterPSFSample
             if (!ParseArgs(argv))
                 return;
 
-            if (useObjectValue)  // TODO add VarLenValue
+            if (useObjectValues)  // TODO add VarLenValue
                 await RunSample<ObjectOrders, Input<ObjectOrders>, Output<ObjectOrders>, ObjectOrders.Functions, ObjectOrders.Serializer>();
             else
                 await RunSample<BlittableOrders, Input<BlittableOrders>, Output<BlittableOrders>, BlittableOrders.Functions, NoSerializer>();
@@ -47,7 +47,7 @@ namespace FasterPSFSample
             where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>, new()
             where TSerializer : BinaryObjectSerializer<TValue>, new()
         {
-            var fpsf = new FPSF<TValue, TInput, TOutput, TFunctions, TSerializer>(useObjectValue, useMultiGroups, useReadCache: false); // ReadCache and CopyReadsToTail are not supported for PSFs
+            var fpsf = new FPSF<TValue, TInput, TOutput, TFunctions, TSerializer>();
             try
             {
                 var sw = new Stopwatch();
@@ -62,7 +62,7 @@ namespace FasterPSFSample
                 ok &= await Delete(fpsf);
                 sw.Stop();
                 Console.WriteLine("--------------------------------------------------------");
-                Console.WriteLine($"===--- Completed run: UseObjects {useObjectValue}, MultiGroup {useMultiGroups}, Async {useAsync}, Flush {flushAndEvict}, time = {Trim(sw.Elapsed)}");
+                Console.WriteLine($"===--- Completed run: UseObjects {useObjectValues}, MultiGroup {useMultiGroups}, Async {useAsync}, Flush {flushAndEvict}, time = {Trim(sw.Elapsed)}");
                 Console.WriteLine();
                 Console.Write("===>>> ");
                 Console.WriteLine(ok ? "Passed! All operations succeeded" : "*** Failed! *** One or more operations failed");

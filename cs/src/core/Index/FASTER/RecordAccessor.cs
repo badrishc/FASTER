@@ -17,10 +17,6 @@ namespace FASTER.core
         internal RecordAccessor(FasterKV<Key, Value> fkv) => this.fkv = fkv;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool IsReadCacheAddress(long logicalAddress)
-            => this.fkv.UseReadCache && (logicalAddress & Constants.kReadCacheBitMask) != 0;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void VerifyAddress(long logicalAddress)
         {
             if (!IsLogAddress(logicalAddress))
@@ -44,8 +40,16 @@ namespace FASTER.core
         /// </summary>
         /// <param name="logicalAddress">The address to verify</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool IsReadCacheAddress(long logicalAddress)
+            => this.fkv.UseReadCache && ((logicalAddress & Constants.kReadCacheBitMask) != 0);
+
+        /// <summary>
+        /// Indicates whether the address is within the FasterKV HybridLog
+        /// </summary>
+        /// <param name="logicalAddress">The address to verify</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool IsLogAddress(long logicalAddress)
-            => logicalAddress != Constants.kInvalidAddress && (!this.fkv.UseReadCache || (logicalAddress & Constants.kReadCacheBitMask) == 0);
+            => logicalAddress >= this.fkv.Log.BeginAddress && logicalAddress <= this.fkv.Log.TailAddress && !IsReadCacheAddress(logicalAddress);
 
         /// <summary>
         /// Indicates whether the address is in memory within the FasterKV HybridLog

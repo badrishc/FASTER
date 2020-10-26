@@ -176,9 +176,9 @@ namespace FASTER.PSF
         {
             var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
             var session = this.fkv.For(indexingFunctions).NewSession(indexingFunctions, sessionId, threadAffinitized, variableLengthStruct);
-            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>();
+            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this.fkv);
             var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
+            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, this.fkv.RecordAccessor, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
         }
 
         /// <summary>
@@ -222,9 +222,9 @@ namespace FASTER.PSF
         {
             var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
             var session = this.fkv.For(indexingFunctions).ResumeSession(indexingFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
-            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>();
+            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this.fkv);
             var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
+            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, this.fkv.RecordAccessor, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
         }
 
         #endregion New Session Operations
