@@ -23,6 +23,7 @@ namespace FasterPSFSample
         private static int intersectMediumBlue7Count, unionMediumBlue7Count;
         private static int unionMediumLargeCount, unionRedBlueCount;
         private static int unionMediumLargeRedBlueCount, intersectMediumLargeRedBlueCount;
+        private static int xxlDeletedCount;
         
         internal static Dictionary<Key, IOrders> keyDict = new Dictionary<Key, IOrders>();
 
@@ -60,9 +61,16 @@ namespace FasterPSFSample
                 ok &= await UpdateColorByRMW(fpsf);
                 ok &= UpdateCountByUpsert(fpsf);
                 ok &= await Delete(fpsf);
+                ok &= await QueryPSFsForFinalVerification(fpsf);
                 sw.Stop();
+
+                var pendingReadsString = (useReadCache, copyReadsToTail) switch {
+                    (true, false) => "Cache",
+                    (false, true) => "Tail",
+                    _ => "<none>"
+                };
                 Console.WriteLine("--------------------------------------------------------");
-                Console.WriteLine($"===--- Completed run: UseObjects {useObjectValues}, MultiGroup {useMultiGroups}, Async {useAsync}, Flush {flushAndEvict}, time = {Trim(sw.Elapsed)}");
+                Console.WriteLine($"===--- Completed run: Async {useAsync}, MultiGroup {useMultiGroups}, ObjValues {useObjectValues}, PendingReadCopy {pendingReadsString}, Flush {flushAndEvict}, time = {Trim(sw.Elapsed)}");
                 Console.WriteLine();
                 Console.Write("===>>> ");
                 Console.WriteLine(ok ? "Passed! All operations succeeded" : "*** Failed! *** One or more operations failed");
@@ -288,9 +296,10 @@ namespace FasterPSFSample
 
         private static string Trim(TimeSpan ts) => ts.ToString(@"hh\:mm\:ss\.fff");
 
-        private static bool WriteStatus(string activity, bool ok, long count, Stopwatch sw)
+        private static bool WriteStatus(string activity, bool ok, long count, Stopwatch sw, bool isUpdate)
         {
-            Console.WriteLine($"{indent4}{activity} {PassOrFail(ok)}, {count:N0} records, time = {Trim(sw.Elapsed)}");
+            var opString = isUpdate ? "updated" : "read";
+            Console.WriteLine($"{indent4}{activity} {PassOrFail(ok)}, {count:N0} records {opString}, time = {Trim(sw.Elapsed)}");
             return ok;
         }
 
@@ -331,6 +340,11 @@ namespace FasterPSFSample
             ok &= VerifyProviderDatas(providerDatas, "Blue", blueCount, ref count);
 
             providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.ColorPsf, new ColorKey(Color.Red))
+                                : await RunQuery(fpsf.CombinedColorPsf, new CombinedKey(Color.Red));
+            ok &= VerifyProviderDatas(providerDatas, "Red", redCount, ref count);
+
+            providerDatas = useMultiGroups
                                 ? await RunQuery(fpsf.CountBinPsf, new CountBinKey(7))
                                 : await RunQuery(fpsf.CombinedCountBinPsf, new CombinedKey(7));
             ok &= VerifyProviderDatas(providerDatas, "Bin7", bin7Count, ref count);
@@ -341,7 +355,7 @@ namespace FasterPSFSample
             ok &= VerifyProviderDatas(providerDatas, "LastBin", 0, ref count);  // Insert skipped (returned null from the PSF) all that fall into the last bin
 
             sw.Stop();
-            return WriteStatus(activity, ok, count, sw);
+            return WriteStatus(activity, ok, count, sw, isUpdate: false);
         }
 
         internal async static Task<bool> QueryPSFsWithBoolOps<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -445,6 +459,7 @@ namespace FasterPSFSample
             }
             else
             {
+                // Queries here are done twice, to illustrate the different ways of querying within a single group.
                 providerDatas = await RunQuery2(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium),
                                                fpsf.CombinedColorPsf, new CombinedKey(Color.Blue), (sz, cl) => sz && cl);
                 ok &= VerifyProviderDatas(providerDatas, nameof(intersectMediumBlueCount), intersectMediumBlueCount, ref count);
@@ -477,8 +492,14 @@ namespace FasterPSFSample
                                                          (fpsf.CombinedCountBinPsf, new [] { new CombinedKey(7) }.AsEnumerable()) }, sz => sz[0] || sz[1] || sz[2]);
                 ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumBlue7Count), unionMediumBlue7Count, ref count);
                 // ---
+                providerDatas = await RunQuery2(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium),
+                                               fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Large), (sz, cl) => sz || cl);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeCount), unionMediumLargeCount, ref count);
                 providerDatas = await RunQuery1EnumKeys(fpsf.CombinedSizePsf, new[] { new CombinedKey(Constants.Size.Medium), new CombinedKey(Constants.Size.Large) });
                 ok &= VerifyProviderDatas(providerDatas, nameof(unionMediumLargeCount), unionMediumLargeCount, ref count);
+                providerDatas = await RunQuery2(fpsf.CombinedColorPsf, new CombinedKey(Color.Blue),
+                                               fpsf.CombinedColorPsf, new CombinedKey(Color.Red), (sz, cl) => sz || cl);
+                ok &= VerifyProviderDatas(providerDatas, nameof(unionRedBlueCount), unionRedBlueCount, ref count);
                 providerDatas = await RunQuery1EnumKeys(fpsf.CombinedColorPsf, new[] { new CombinedKey(Color.Blue), new CombinedKey(Color.Red) });
                 ok &= VerifyProviderDatas(providerDatas, nameof(unionRedBlueCount), unionRedBlueCount, ref count);
                 // ---
@@ -498,13 +519,11 @@ namespace FasterPSFSample
             }
 
             sw.Stop();
-            return WriteStatus(activity, ok, count, sw);
+            return WriteStatus(activity, ok, count, sw, isUpdate: false);
         }
 
-        private static bool WriteResult(bool isInitial, string name, int expectedCount, int actualCount, bool allResultsMatch, ref long totalCount, bool isDelete = false)
+        private static bool WriteUpdateResult(bool isInitial, string name, int expectedCount, int actualCount, bool allResultsMatch, bool isDelete = false)
         {
-            totalCount += actualCount;
-
             var tag = isInitial ? "Initial" : (isDelete ? "Deleted" : "Updated");
             if (expectedCount == actualCount && allResultsMatch) { 
                 Console.WriteLine($"{indent4}{tag} {name} Passed: expected == actual ({expectedCount:N0})");
@@ -532,24 +551,24 @@ namespace FasterPSFSample
             FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
 
-            var sw = new Stopwatch();
-            sw.Start();
-
             FasterKVProviderData<Key, TValue>[] GetSizeDatas(Constants.Size size)
                 => useMultiGroups
                     ? session.QueryPSF(fpsf.SizePsf, new SizeKey(size)).ToArray()
                     : session.QueryPSF(fpsf.CombinedSizePsf, new CombinedKey(size)).ToArray();
 
-            long count = 0;
-
             var xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
-            var ok = WriteResult(isInitial: true, "XXLarge", 0, xxlDatas.Length, true, ref count);
+            var ok = WriteUpdateResult(isInitial: true, "XXLarge", 0, xxlDatas.Length, true);
             var mediumDatas = GetSizeDatas(Constants.Size.Medium);
-            ok &= WriteResult(isInitial: true, "Medium", mediumCount, mediumDatas.Length, AllMatch(mediumDatas, val => val.SizeInt == (int)Constants.Size.Medium), ref count);
+            ok &= WriteUpdateResult(isInitial: true, "Medium", mediumCount, mediumDatas.Length, AllMatch(mediumDatas, val => val.SizeInt == (int)Constants.Size.Medium));
+
             var expected = mediumDatas.Length;
             Console.WriteLine($"{indent2}Changing all Medium to XXLarge");
 
             var context = new Context<TValue>();
+
+            var sw = new Stopwatch();
+            sw.Start();
+
             foreach (var providerData in mediumDatas)
             {
                 // Get the old value and confirm it's as expected. We cannot have ref locals because this is an async function.
@@ -568,13 +587,14 @@ namespace FasterPSFSample
                 session.Upsert(ref providerData.GetKey(), ref newValue, context);
             }
 
+            sw.Stop();
+
             xxlDatas = GetSizeDatas(Constants.Size.XXLarge);
             mediumDatas = GetSizeDatas(Constants.Size.Medium);
-            ok &= WriteResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XXLarge), ref count);
-            ok &= WriteResult(isInitial: false, "Medium", 0, mediumDatas.Length, true, ref count);
+            ok &= WriteUpdateResult(isInitial: false, "XXLarge", expected, xxlDatas.Length, AllMatch(xxlDatas, val => val.SizeInt == (int)Constants.Size.XXLarge));
+            ok &= WriteUpdateResult(isInitial: false, "Medium", 0, mediumDatas.Length, true);
 
-            sw.Stop();
-            return WriteStatus(activity, ok, count, sw);
+            return WriteStatus(activity, ok, expected, sw, isUpdate: true);
         }
 
         internal async static Task<bool> UpdateColorByRMW<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -591,25 +611,24 @@ namespace FasterPSFSample
             FlushAndEvictIfRequested(fpsf);
             using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
 
-            var sw = new Stopwatch();
-            sw.Start();
-
             FasterKVProviderData<Key, TValue>[] GetColorDatas(Color color)
                 => useMultiGroups
                     ? session.QueryPSF(fpsf.ColorPsf, new ColorKey(color)).ToArray()
                     : session.QueryPSF(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArray();
 
-            long count = 0;
-
             var purpleDatas = GetColorDatas(Color.Purple);
-            var ok = WriteResult(isInitial: true, "Purple", 0, purpleDatas.Length, true, ref count);
+            var ok = WriteUpdateResult(isInitial: true, "Purple", 0, purpleDatas.Length, true);
             var blueDatas = GetColorDatas(Color.Blue);
-            ok &= WriteResult(isInitial: true, "Blue", blueCount, blueDatas.Length, AllMatch(blueDatas, val => val.ColorArgb == Color.Blue.ToArgb()), ref count);
+            ok &= WriteUpdateResult(isInitial: true, "Blue", blueCount, blueDatas.Length, AllMatch(blueDatas, val => val.ColorArgb == Color.Blue.ToArgb()));
             var expected = blueDatas.Length;
             Console.WriteLine($"{indent2}Changing all Blue to Purple");
 
             var context = new Context<TValue>();
             var input = new TInput { IPUColorInt = Color.Purple.ToArgb() };
+
+            var sw = new Stopwatch();
+            sw.Start();
+
             foreach (var providerData in blueDatas)
             {
                 // This will call Functions<>.InPlaceUpdater if !flushAndEvict, else CopyUpdater.
@@ -618,16 +637,16 @@ namespace FasterPSFSample
                 else
                     session.RMW(ref providerData.GetKey(), ref input, context);
             }
+            sw.Stop();
 
             session.CompletePending(spinWait: true);
 
             purpleDatas = GetColorDatas(Color.Purple);
             blueDatas = GetColorDatas(Color.Blue);
-            ok &= WriteResult(isInitial: false, "Purple", expected, purpleDatas.Length, AllMatch(purpleDatas, val => val.ColorArgb == Color.Purple.ToArgb()), ref count);
-            ok &= WriteResult(isInitial: false, "Blue", 0, blueDatas.Length, true, ref count);
+            ok &= WriteUpdateResult(isInitial: false, "Purple", expected, purpleDatas.Length, AllMatch(purpleDatas, val => val.ColorArgb == Color.Purple.ToArgb()));
+            ok &= WriteUpdateResult(isInitial: false, "Blue", 0, blueDatas.Length, true);
 
-            sw.Stop();
-            return WriteStatus(activity, ok, count, sw);
+            return WriteStatus(activity, ok, expected, sw, isUpdate: true);
         }
 
         internal static bool UpdateCountByUpsert<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -653,14 +672,13 @@ namespace FasterPSFSample
                     ? session.QueryPSF(fpsf.CountBinPsf, new CountBinKey(bin)).ToArray()
                     : session.QueryPSF(fpsf.CombinedCountBinPsf, new CombinedKey(bin)).ToArray();
 
-            long count = 0;
-
             // First show we've nothing in the last bin, and get all in bin7.
             var lastBinDatas = GetCountDatas(CountBinKey.LastBin);
-            var ok = WriteResult(isInitial: true, "LastBin", 0, lastBinDatas.Length, true, ref count);
+            var ok = WriteUpdateResult(isInitial: true, "LastBin", 0, lastBinDatas.Length, true);
 
             var bin7Datas = GetCountDatas(bin7);
-            ok &= WriteResult(isInitial: true, "Bin7", bin7Count, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7), ref count);
+            ok &= WriteUpdateResult(isInitial: true, "Bin7", bin7Count, bin7Datas.Length, AllMatch(bin7Datas, val => CountBinKey.GetBin(val.Count) == bin7));
+            var expected = bin7Datas.Length;
 
             Console.WriteLine($"{indent2}Changing all Bin7 to LastBin");
             var context = new Context<TValue>();
@@ -683,14 +701,15 @@ namespace FasterPSFSample
                 session.Upsert(ref providerData.GetKey(), ref newValue, context);
             }
 
+            // We updated all Bin7 to LastBin, so they should disappear because our PSF returns null for LastBin.
             lastBinDatas = GetCountDatas(CountBinKey.LastBin);
-            ok &= WriteResult(isInitial: false, "LastBin", 0, lastBinDatas.Length, true, ref count);
+            ok &= WriteUpdateResult(isInitial: false, "LastBin", 0, lastBinDatas.Length, true);
 
             bin7Datas = GetCountDatas(bin7);
-            ok &= WriteResult(isInitial: false, "Bin7", 0, bin7Datas.Length, true, ref count);
+            ok &= WriteUpdateResult(isInitial: false, "Bin7", 0, bin7Datas.Length, true);
 
             sw.Stop();
-            return WriteStatus(activity, ok, count, sw);
+            return WriteStatus(activity, ok, expected, sw, isUpdate: true);
         }
 
         internal async static Task<bool> Delete<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
@@ -719,23 +738,91 @@ namespace FasterPSFSample
                         ? await session.QueryPSFAsync(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArrayAsync()
                         : session.QueryPSF(fpsf.CombinedColorPsf, new CombinedKey(color)).ToArray();
 
-            long count = 0;
-
             var redDatas = await GetColorDatas(Color.Red);
-            var ok = WriteResult(isInitial: true, "Red", redCount, redDatas.Length, AllMatch(redDatas, val => val.ColorArgb == Color.Red.ToArgb()), ref count);
+            var ok = WriteUpdateResult(isInitial: true, "Red", redCount, redDatas.Length, AllMatch(redDatas, val => val.ColorArgb == Color.Red.ToArgb()));
+            var expected = redDatas.Length;
 
             var context = new Context<TValue>();
             foreach (var providerData in redDatas)
             {
                 // This will call Functions<>.InPlaceUpdater. Note: there is no DeleteAsync().
                 session.Delete(ref providerData.GetKey(), context);
+
+                // We query XXL count in final verification, so keep track of whether we've deleted one.
+                if (providerData.GetValue().SizeInt == (int)Constants.Size.XXLarge)
+                    ++xxlDeletedCount;
             }
 
             redDatas = await GetColorDatas(Color.Red);
-            ok &= WriteResult(isInitial: false, "Red", 0, redDatas.Length, true, ref count, isDelete: true);
+            ok &= WriteUpdateResult(isInitial: false, "Red", 0, redDatas.Length, true, isDelete: true);
 
             sw.Stop();
-            return WriteStatus(activity, ok, count, sw);
+            return WriteStatus(activity, ok, expected, sw, isUpdate: true);
+        }
+
+        internal async static Task<bool> QueryPSFsForFinalVerification<TValue, TInput, TOutput, TFunctions, TSerializer>(FPSF<TValue, TInput, TOutput, TFunctions, TSerializer> fpsf)
+            where TValue : IOrders, new()
+            where TInput : IInput<TValue>, new()
+            where TOutput : IOutput<TValue>, new()
+            where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>, new()
+            where TSerializer : BinaryObjectSerializer<TValue>, new()
+        {
+            Console.WriteLine();
+            const string activity = "Querying PSFs with no boolean ops";
+            Console.WriteLine(activity);
+
+            FlushAndEvictIfRequested(fpsf);
+            using var session = fpsf.PSFFasterKV.For(new TFunctions()).NewSession<TFunctions>();
+
+            var sw = new Stopwatch();
+            sw.Start();
+
+            FasterKVProviderData<Key, TValue>[] providerDatas = null;
+            var ok = true;
+            long count = 0;
+
+            async Task<FasterKVProviderData<Key, TValue>[]> RunQuery<TPSFKey>(IPSF psf, TPSFKey key) where TPSFKey : struct
+                => useAsync
+                    ? await session.QueryPSFAsync(psf, key).ToArrayAsync()
+                    : session.QueryPSF(psf, key).ToArray();
+
+            // Make sure operations were consistent across all values (and groups, if multiGroup).
+            // These queries reflect the updated counts from prior operations, e.g. XXLarge count should now be what Medium count started as.
+
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.SizePsf, new SizeKey(Constants.Size.Medium))
+                                : await RunQuery(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.Medium));
+            ok &= VerifyProviderDatas(providerDatas, "Medium", 0, ref count);
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.SizePsf, new SizeKey(Constants.Size.XXLarge))
+                                : await RunQuery(fpsf.CombinedSizePsf, new CombinedKey(Constants.Size.XXLarge));
+            ok &= VerifyProviderDatas(providerDatas, "XXLarge", mediumCount - xxlDeletedCount, ref count);
+
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.ColorPsf, new ColorKey(Color.Blue))
+                                : await RunQuery(fpsf.CombinedColorPsf, new CombinedKey(Color.Blue));
+            ok &= VerifyProviderDatas(providerDatas, "Blue", 0, ref count);
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.ColorPsf, new ColorKey(Color.Purple))
+                                : await RunQuery(fpsf.CombinedColorPsf, new CombinedKey(Color.Purple));
+            ok &= VerifyProviderDatas(providerDatas, "Purple", blueCount, ref count);
+
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.ColorPsf, new ColorKey(Color.Red))
+                                : await RunQuery(fpsf.CombinedColorPsf, new CombinedKey(Color.Red));
+            ok &= VerifyProviderDatas(providerDatas, "Red", 0, ref count);
+
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.CountBinPsf, new CountBinKey(7))
+                                : await RunQuery(fpsf.CombinedCountBinPsf, new CombinedKey(7));
+            ok &= VerifyProviderDatas(providerDatas, "Bin7", 0, ref count);
+            providerDatas = useMultiGroups
+                                ? await RunQuery(fpsf.CountBinPsf, new CountBinKey(CountBinKey.LastBin))
+                                : await RunQuery(fpsf.CombinedCountBinPsf, new CombinedKey(CountBinKey.LastBin));
+            ok &= VerifyProviderDatas(providerDatas, "LastBin", 0, ref count);  // Insert skipped (returned null from the PSF) all that fall into the last bin
+
+            sw.Stop();
+            return WriteStatus(activity, ok, count, sw, isUpdate: false);
         }
     }
 }

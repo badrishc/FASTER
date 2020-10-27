@@ -200,10 +200,7 @@ namespace FASTER.PSF
         public IEnumerable<FasterKVProviderData<TKVKey, TKVValue>> QueryPSF<TPSFKey>(
                 IPSF psf, TPSFKey key, PSFQuerySettings querySettings = null)
             where TPSFKey : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psf, key, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psf, key, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -221,10 +218,7 @@ namespace FASTER.PSF
         public IAsyncEnumerable<FasterKVProviderData<TKVKey, TKVValue>> QueryPSFAsync<TPSFKey>(
                 IPSF psf, TPSFKey key, PSFQuerySettings querySettings = null)
             where TPSFKey : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf, key, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf, key, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -243,11 +237,8 @@ namespace FASTER.PSF
         /// instance, as identified by the TRecordIds stored in the secondary FasterKV instances</returns>
         public IEnumerable<FasterKVProviderData<TKVKey, TKVValue>> QueryPSF<TPSFKey>(
                 IPSF psf, IEnumerable<TPSFKey> keys, PSFQuerySettings querySettings = null)
-            where TPSFKey : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psf, keys, querySettings));
-        }
+            where TPSFKey : struct 
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psf, keys, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -267,10 +258,7 @@ namespace FASTER.PSF
         public IAsyncEnumerable<FasterKVProviderData<TKVKey, TKVValue>> QueryPSFAsync<TPSFKey>(
                 IPSF psf, IEnumerable<TPSFKey> keys, PSFQuerySettings querySettings = null)
             where TPSFKey : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf, keys, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf, keys, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -299,10 +287,7 @@ namespace FASTER.PSF
                     PSFQuerySettings querySettings = null)
             where TPSFKey1 : struct
             where TPSFKey2 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, key1, psf2, key2, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, key1, psf2, key2, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -331,10 +316,7 @@ namespace FASTER.PSF
                     PSFQuerySettings querySettings = null)
             where TPSFKey1 : struct
             where TPSFKey2 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, key1, psf2, key2, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, key1, psf2, key2, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -366,10 +348,7 @@ namespace FASTER.PSF
                     PSFQuerySettings querySettings = null)
             where TPSFKey1 : struct
             where TPSFKey2 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, keys1, psf2, keys2, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, keys1, psf2, keys2, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -401,10 +380,7 @@ namespace FASTER.PSF
                     PSFQuerySettings querySettings = null)
             where TPSFKey1 : struct
             where TPSFKey2 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, keys1, psf2, keys2, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, keys1, psf2, keys2, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -438,10 +414,7 @@ namespace FASTER.PSF
             where TPSFKey1 : struct
             where TPSFKey2 : struct
             where TPSFKey3 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, key1, psf2, key2, psf3, key3, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, key1, psf2, key2, psf3, key3, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -475,10 +448,7 @@ namespace FASTER.PSF
             where TPSFKey1 : struct
             where TPSFKey2 : struct
             where TPSFKey3 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, key1, psf2, key2, psf3, key3, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, key1, psf2, key2, psf3, key3, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -516,10 +486,7 @@ namespace FASTER.PSF
             where TPSFKey1 : struct
             where TPSFKey2 : struct
             where TPSFKey3 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, keys1, psf2, keys2, psf3, keys3, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psf1, keys1, psf2, keys2, psf3, keys3, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -557,10 +524,7 @@ namespace FASTER.PSF
             where TPSFKey1 : struct
             where TPSFKey2 : struct
             where TPSFKey3 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, keys1, psf2, keys2, psf3, keys3, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psf1, keys1, psf2, keys2, psf3, keys3, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -589,10 +553,7 @@ namespace FASTER.PSF
                     Func<bool[], bool> matchPredicate,
                     PSFQuerySettings querySettings = null)
             where TPSFKey : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psfsAndKeys, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psfsAndKeys, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -621,10 +582,7 @@ namespace FASTER.PSF
                     Func<bool[], bool> matchPredicate,
                     PSFQuerySettings querySettings = null)
             where TPSFKey : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psfsAndKeys, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psfsAndKeys, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -662,10 +620,7 @@ namespace FASTER.PSF
                     PSFQuerySettings querySettings = null)
             where TPSFKey1 : struct
             where TPSFKey2 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psfsAndKeys1, psfsAndKeys2, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psfsAndKeys1, psfsAndKeys2, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -703,10 +658,7 @@ namespace FASTER.PSF
                     PSFQuerySettings querySettings = null)
             where TPSFKey1 : struct
             where TPSFKey2 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psfsAndKeys1, psfsAndKeys2, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psfsAndKeys1, psfsAndKeys2, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
 
         /// <summary>
@@ -745,10 +697,7 @@ namespace FASTER.PSF
             where TPSFKey1 : struct
             where TPSFKey2 : struct
             where TPSFKey3 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatas(this.psfSession.QueryPSF(psfsAndKeys1, psfsAndKeys2, psfsAndKeys3, matchPredicate, querySettings));
-        }
+            => this.ReturnProviderDatas(this.psfSession.QueryPSF(psfsAndKeys1, psfsAndKeys2, psfsAndKeys3, matchPredicate, querySettings));
 
 #if NETSTANDARD21
         /// <summary>
@@ -787,10 +736,7 @@ namespace FASTER.PSF
             where TPSFKey1 : struct
             where TPSFKey2 : struct
             where TPSFKey3 : struct
-        {
-            // Unsafe(Resume|Suspend)Thread are done in the session.PsfRead* operations called by PSFGroup.QueryPSF.
-            return this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psfsAndKeys1, psfsAndKeys2, psfsAndKeys3, matchPredicate, querySettings), querySettings);
-        }
+            => this.ReturnProviderDatasAsync(this.psfSession.QueryPSFAsync(psfsAndKeys1, psfsAndKeys2, psfsAndKeys3, matchPredicate, querySettings), querySettings);
 #endif // NETSTANDARD21
         #endregion PSF Queries
 

@@ -134,12 +134,16 @@ namespace PSF.Index
             keys.Set(poolKeyMem);
         }
 
-        internal unsafe void MarkChanges(ref GroupCompositeKeyPair keysPair)
+        internal unsafe void MarkChanges(ref GroupCompositeKeyPair keysPair, bool recordIdChanged)
         {
             ref GroupCompositeKey before = ref keysPair.Before;
             ref GroupCompositeKey after = ref keysPair.After;
             ref CompositeKey<TPSFKey> beforeCompositeKey = ref before.CastToKeyRef<CompositeKey<TPSFKey>>();
             ref CompositeKey<TPSFKey> afterCompositeKey = ref after.CastToKeyRef<CompositeKey<TPSFKey>>();
+
+            if (recordIdChanged)
+                keysPair.HasChanges = true;
+
             for (var ii = 0; ii < this.PSFCount; ++ii)
             {
                 ref KeyPointer<TPSFKey> beforeKeyPointer = ref beforeCompositeKey.GetKeyPointerRef(ii, this.keyPointerSize);
@@ -220,9 +224,10 @@ namespace PSF.Index
                     {
                         ref GroupCompositeKeyPair groupKeysPair = ref changeTracker.GetGroupRef(groupOrdinal);
                         StoreKeys(ref groupKeysPair.After, keyBytes, keyMemLen);
-                        this.MarkChanges(ref groupKeysPair);
+                        this.MarkChanges(ref groupKeysPair, changeTracker.AfterRecordId.CompareTo(changeTracker.BeforeRecordId) != 0);
+
                         // TODOtest: In debug, for initial dev, follow chains to assert the values match what is in the record's compositeKey
-                        if (!groupKeysPair.HasChanges && changeTracker.AfterRecordId.CompareTo(changeTracker.BeforeRecordId) == 0)
+                        if (!groupKeysPair.HasChanges)
                             return Status.OK;
                     }
                 }
