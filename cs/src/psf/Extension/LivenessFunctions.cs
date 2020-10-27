@@ -3,7 +3,6 @@
 
 using FASTER.core;
 using PSF.Index;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace FASTER.PSF

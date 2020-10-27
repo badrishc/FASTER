@@ -98,7 +98,7 @@ namespace PSF.Index
                 {
                     physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
 
-                    // Note: we never have SkipKeyVerification in the PSF flavor of this Read.
+                    // Note: we never have NoKey in the PSF flavor of this Read.
 
                     // The comparer is called during AsyncGetFromDiskCallback with a ref to the beginning of the stored CompsiteKey, so match that here.
                     var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(physicalAddress);

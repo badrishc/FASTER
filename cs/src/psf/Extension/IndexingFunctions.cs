@@ -5,7 +5,6 @@ using FASTER.core;
 using PSF.Index;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System;
 using System.Collections.Generic;
 
 namespace FASTER.PSF
@@ -23,6 +22,7 @@ namespace FASTER.PSF
         internal PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long> ChangeTracker;
         internal long LogicalAddress;
         internal Queue<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>> Queue = new Queue<PSFChangeTracker<FasterKVProviderData<TKVKey, TKVValue>, long>>();
+        internal IndexableOperation IndexableOp;
 
         internal IndexingFunctions(UserFunctions userFunctions, LogAccessor<TKVKey, TKVValue> logAccessor, RecordAccessor<TKVKey, TKVValue> recAcc,
                                   PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfMgr)
@@ -37,6 +37,7 @@ namespace FASTER.PSF
         {
             this.ChangeTracker = null;
             this.LogicalAddress = Constants.kInvalidAddress;
+            this.IndexableOp = IndexableOperation.None;
         }
 
         internal bool IsSet => this.ChangeTracker is {} || this.LogicalAddress != Constants.kInvalidAddress;
@@ -47,29 +48,37 @@ namespace FASTER.PSF
         public void SingleReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddresss)
             => this.userFunctions.SingleReader(ref key, ref input, ref value, ref output, logicalAddresss);
 
-        public void SingleWriter(ref TKVKey key, ref TKVValue oldValue, ref TKVValue newValue, long logicalAddress)
+        public void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)
         {
-            this.userFunctions.SingleWriter(ref key, ref oldValue, ref newValue, logicalAddress);
+            this.userFunctions.SingleWriter(ref key, ref src, ref dst, logicalAddress);
 
             // This is called in the following cases:
-            //  When we do not have a previous record:
-            //      - Upsert did not find the key so this is a pure insert, which goes through a fast path that does not allocate a ChangeTracker.
+            //  IndexableOperation.Upsert:
+            //      - Upsert did not find the key so this is a pure insert.
             //      - Upsert found a key that is on-disk; by design it does not fetch the record from disk to verify a key match. Instead, fasterKV
             //        writes a new record at the tail, and the old record will fail the liveness check at query time which avoids duplicates.
             //      - Upsert found a deleted record, so a new record is inserted (and we don't have the previous value).
-            //  Otherwise, this is:
-            //      - This is a copy to the readcache, which should not be considered in indexing, and does not affect the validity of the RecordId.
-            //      - A read from disk is copying the record to the tail of the log.
+            //  IndexableOperation.CompletePending: a pending read from disk is completing and copying the record to:
+            //      - The readcache, which should not be considered in indexing, and does not affect the validity of the RecordId.
+            //      - The tail of the log, which means we must update it.
+            // For all these cases, we have no oldAddress to do an RCU, so we simply insert a new record.
 
             // Skip writes to the read cache.
             if (!this.recordAccessor.IsLogAddress(logicalAddress))
                 return;
 
-            // In all non-readcache cases, the record should be in memory, and we do an insert via the fast path (without changetracker).
+            // In all non-readcache cases, the record should be in the primary FKV.Log memory.
             Debug.Assert(this.recordAccessor.IsInMemory(logicalAddress));
-
-            // This is an update, but because we do not have the old logicalAddress we cannot RCU; instead we must simply insert a new record, using the fast path.
-            this.LogicalAddress = logicalAddress;
+            if (this.IndexableOp == IndexableOperation.Upsert)
+            {
+                // Do an insert via the fast path (without changeTracker).
+                this.LogicalAddress = logicalAddress;
+            }
+            else
+            {
+                // We are in pending read completion, so create the changeTracker and let ReadCompletionCallback store it in the context.
+                SetBeforeData(ref key, ref src, logicalAddress, isIpu: false);
+            }
             return;
         }
 
@@ -121,14 +130,17 @@ namespace FASTER.PSF
             return false;
         }
 
-        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
-            => this.userFunctions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
-
         private void EnqueueTracker()
         {
-            if (this.ChangeTracker is {})
+            if (this.ChangeTracker is { })
                 this.Queue.Enqueue(this.ChangeTracker);
             this.Clear();
+        }
+
+        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
+        {
+            this.EnqueueTracker();
+            this.userFunctions.ReadCompletionCallback(ref key, ref input, ref output, ctx, status, recordInfo);
         }
 
         public void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, Status status)

@@ -22,6 +22,7 @@ namespace FASTER.PSF
         where TFunctions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
     {
         private readonly AdvancedClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions>> fkvSession;
+        private readonly bool fkvCopyReadsToTail;
         private readonly bool sessionSupportAsync;
         private readonly LogAccessor<TKVKey, TKVValue> fkvLogAccessor;
         private readonly RecordAccessor<TKVKey, TKVValue> fkvRecordAccessor;
@@ -32,17 +33,17 @@ namespace FASTER.PSF
 
         private readonly PSFIndexSession<FasterKVProviderData<TKVKey, TKVValue>, long> psfSession;
 
-        internal const string NotAsyncSessionErr = "Session does not support async operations";
+        internal const string NotAsyncSessionErr = ClientSession<int, int, int, int, Empty, SimpleFunctions<int, int>>.NotAsyncSessionErr;
 
-        internal PSFClientSession(LogAccessor<TKVKey, TKVValue> logAccessor, RecordAccessor<TKVKey, TKVValue> recordAccessor,
-                                  IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> indexingFunctions,
+        internal PSFClientSession(FasterKV<TKVKey, TKVValue> fkv, IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions> indexingFunctions,
                                   AdvancedClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, TFunctions>> session, bool sessionSupportAsync,
                                   AdvancedClientSession<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context,
                                                    IAdvancedFunctions<TKVKey, TKVValue, LivenessFunctions<TKVKey, TKVValue>.Input, LivenessFunctions<TKVKey, TKVValue>.Output, LivenessFunctions<TKVKey, TKVValue>.Context>> livenessSession,
                                   PSFManager<FasterKVProviderData<TKVKey, TKVValue>, long> psfManager)
         {
-            this.fkvLogAccessor = logAccessor;
-            this.fkvRecordAccessor = recordAccessor;
+            this.fkvLogAccessor = fkv.Log;
+            this.fkvRecordAccessor = fkv.RecordAccessor;
+            this.fkvCopyReadsToTail = fkv.CopyReadsToTail;
             this.fkvSession = session;
             this.sessionSupportAsync = sessionSupportAsync;
             this.indexingFunctions = indexingFunctions;
@@ -51,10 +52,11 @@ namespace FASTER.PSF
             this.psfSession = psfManager.NewSession();
         }
 
-        private void ThrowIfActive()
+        private void EnterIndexableOperation(IndexableOperation indexableOp)
         {
             if (this.indexingFunctions.IsSet)
                 throw new PSFInvalidOperationException("Cannot execute concurrent actions on a session");
+            this.indexingFunctions.IndexableOp = indexableOp;
         }
 
         #region PSF Queries
@@ -799,52 +801,88 @@ namespace FASTER.PSF
 
         /// <inheritdoc/>
         public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, TContext userContext = default, long serialNo = 0)
-            => this.fkvSession.Read(ref key, ref input, ref output, userContext, serialNo);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.Read(ref key, ref input, ref output, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
         public Status Read(TKVKey key, TInput input, out TOutput output, TContext userContext = default, long serialNo = 0)
-            => this.fkvSession.Read(key, input, out output, userContext, serialNo);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.Read(key, input, out output, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
         public Status Read(ref TKVKey key, ref TOutput output, TContext userContext = default, long serialNo = 0)
-            => this.fkvSession.Read(ref key, ref output, userContext, serialNo);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.Read(ref key, ref output, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
         public Status Read(TKVKey key, out TOutput output, TContext userContext = default, long serialNo = 0)
-            => this.fkvSession.Read(key, out output, userContext, serialNo);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.Read(key, out output, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
-        public (Status, TOutput) Read(TKVKey key, TContext userContext = default, long serialNo = 0) 
-            => this.fkvSession.Read(key, userContext, serialNo);
+        public (Status, TOutput) Read(TKVKey key, TContext userContext = default, long serialNo = 0)
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.Read(key, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
         public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, ref RecordInfo recordInfo, TContext userContext = default, long serialNo = 0)
-            => this.fkvSession.Read(ref key, ref input, ref output, ref recordInfo, userContext, serialNo);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.Read(ref key, ref input, ref output, ref recordInfo, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
         public Status ReadAtAddress(long address, ref TInput input, ref TOutput output, TContext userContext = default, long serialNo = 0)
-            => this.fkvSession.ReadAtAddress(address, ref input, ref output, userContext, serialNo);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.ReadAtAddress(address, ref input, ref output, userContext, serialNo);
+        }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken);
+        }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.ReadAsync(ref key, ref input, context, serialNo, cancellationToken);
+        }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken);
+        }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(TKVKey key, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.ReadAsync(ref key, context, serialNo, cancellationToken);
+        }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, ref TInput input, long startAddress, TContext userContext = default,
                                                                                                                          long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.fkvSession.ReadAsync(ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
+        {
+            EnterIndexableOperation(IndexableOperation.Read);
+            return this.fkvSession.ReadAsync(ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
+        }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAtAddressAsync(long address, ref TInput input, TContext userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
@@ -853,31 +891,43 @@ namespace FASTER.PSF
         /// <inheritdoc/>
         public Status Upsert(ref TKVKey key, ref TKVValue desiredValue, TContext userContext = default, long serialNo = 0)
         {
-            ThrowIfActive();
-            var status = this.fkvSession.Upsert(ref key, ref desiredValue, userContext, serialNo);
-            if (status == Status.OK)
+            EnterIndexableOperation(IndexableOperation.Upsert);
+            try
             {
-                var providerData = this.indexingFunctions.ChangeTracker is null
-                                    ? new FasterKVProviderData<TKVKey, TKVValue>(this.fkvLogAccessor.GetKeyContainer(ref key),
-                                                                                 this.fkvLogAccessor.GetValueContainer(ref desiredValue))
-                                    : this.indexingFunctions.ChangeTracker.AfterData;
-                status = this.psfSession.Upsert(providerData, this.indexingFunctions.LogicalAddress, this.indexingFunctions.ChangeTracker);
+                var status = this.fkvSession.Upsert(ref key, ref desiredValue, userContext, serialNo);
+                if (status == Status.OK)
+                {
+                    var providerData = this.indexingFunctions.ChangeTracker is null
+                                        ? new FasterKVProviderData<TKVKey, TKVValue>(this.fkvLogAccessor.GetKeyContainer(ref key),
+                                                                                     this.fkvLogAccessor.GetValueContainer(ref desiredValue))
+                                        : this.indexingFunctions.ChangeTracker.AfterData;
+                    status = this.psfSession.Upsert(providerData, this.indexingFunctions.LogicalAddress, this.indexingFunctions.ChangeTracker);
+                }
+                return status;
+            }
+            finally
+            {
                 this.indexingFunctions.Clear();
             }
-            return status;
         }
 
         /// <inheritdoc/>
         public Status RMW(ref TKVKey key, ref TInput input, TContext userContext = default, long serialNo = 0)
         {
-            ThrowIfActive();
-            var status = this.fkvSession.RMW(ref key, ref input, userContext, serialNo);
-            if (status == Status.OK || status == Status.NOTFOUND)
+            EnterIndexableOperation(IndexableOperation.RMW);
+            try
             {
-                status = this.psfSession.Update(this.indexingFunctions.ChangeTracker);
+                var status = this.fkvSession.RMW(ref key, ref input, userContext, serialNo);
+                if (status == Status.OK || status == Status.NOTFOUND)
+                {
+                    status = this.psfSession.Update(this.indexingFunctions.ChangeTracker);
+                }
+                return status;
+            }
+            finally
+            {
                 this.indexingFunctions.Clear();
             }
-            return status;
         }
 
         /// <inheritdoc/>
@@ -886,30 +936,34 @@ namespace FASTER.PSF
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> RMWAsync(ref TKVKey key, ref TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
-            ThrowIfActive();
+            EnterIndexableOperation(IndexableOperation.RMW);
             Debug.Assert(sessionSupportAsync, NotAsyncSessionErr);
-            return this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), context, cancellationToken);
+            return this.CompleteRMWAsync(this.fkvSession.RMWAsync(ref key, ref input, context, serialNo, cancellationToken), cancellationToken);
         }
 
         private async ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> CompleteRMWAsync(
-                ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> primaryFkvValueTask,
-                TContext context, CancellationToken cancellationToken)
+                ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> primaryFkvValueTask, CancellationToken cancellationToken)
         {
-            Status primaryFkvStatus = (await primaryFkvValueTask).Complete();
+            try
+            {
+                Status primaryFkvStatus = (await primaryFkvValueTask).Complete();
 
-            // Either the operation completed synchronously (indexingFunctions.ChangeTracker is not null) or RMWCompletionCallback should have been called exactly once.
-            Debug.Assert(indexingFunctions.ChangeTracker is {} || indexingFunctions.Queue.Count == 1);
-            await this.psfSession.UpdateAsync(indexingFunctions.ChangeTracker ?? indexingFunctions.Queue.Dequeue(), cancellationToken);
+                // Either the operation completed synchronously (indexingFunctions.ChangeTracker is not null) or RMWCompletionCallback should have been called exactly once.
+                Debug.Assert(indexingFunctions.ChangeTracker is { } || indexingFunctions.Queue.Count == 1);
+                await this.psfSession.UpdateAsync(indexingFunctions.ChangeTracker ?? indexingFunctions.Queue.Dequeue(), cancellationToken);
 
-            // Map to unwrapped TFunctions type.
-            var result = new FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>(primaryFkvStatus, default);
-            this.indexingFunctions.Clear();
-            return result;
+                // Map to unwrapped TFunctions type.
+                return new FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>(primaryFkvStatus, default);
+            }
+            finally
+            {
+                this.indexingFunctions.Clear();
+            }
         }
 
         /// <inheritdoc/>
         public ValueTask<FasterKV<TKVKey, TKVValue>.RmwAsyncResult<TInput, TOutput, TContext>> RMWAsync(TKVKey key, TInput input, TContext context = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => RMWAsync(ref key, ref input, context, serialNo, cancellationToken);
+            => this.RMWAsync(ref key, ref input, context, serialNo, cancellationToken);
 
         /// <summary>
         /// Delete operation
@@ -920,16 +974,22 @@ namespace FASTER.PSF
         /// <returns></returns>
         public Status Delete(ref TKVKey key, TContext userContext = default, long serialNo = 0)
         {
-            ThrowIfActive();
-            var status = this.fkvSession.Delete(ref key, userContext, serialNo);
-
-            // If there is no changeTracker, the record was not in memory, so we could not get the old value; we will have to let the liveness check fail the dead record.
-            if (status == Status.OK && this.indexingFunctions.ChangeTracker is {})
+            EnterIndexableOperation(IndexableOperation.Delete);
+            try
             {
-                status = this.psfSession.Delete(this.indexingFunctions.ChangeTracker);
+                var status = this.fkvSession.Delete(ref key, userContext, serialNo);
+
+                // If there is no changeTracker, the record was not in memory, so we could not get the old value; we will have to let the liveness check fail the dead record.
+                if (status == Status.OK && this.indexingFunctions.ChangeTracker is { })
+                {
+                    status = this.psfSession.Delete(this.indexingFunctions.ChangeTracker);
+                }
+                return status;
+            }
+            finally
+            {
                 this.indexingFunctions.Clear();
             }
-            return status;
         }
 
         /// <summary>

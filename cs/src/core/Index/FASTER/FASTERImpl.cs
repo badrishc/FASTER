@@ -129,7 +129,7 @@ namespace FASTER.core
                 {
                     physicalAddress = hlog.GetPhysicalAddress(logicalAddress);
 
-                    if (!pendingContext.skipKeyVerification)
+                    if (!pendingContext.NoKey)
                     {
                         if (!comparer.Equals(ref key, ref hlog.GetKey(physicalAddress)))
                         {
@@ -142,7 +142,7 @@ namespace FASTER.core
                         }
                     } else
                     {
-                        // If skipKeyVerification, we do not have the key in the call and must use the key from the record.
+                        // If NoKey, we do not have the key in the call and must use the key from the record.
                         key = ref hlog.GetKey(physicalAddress);
                     }
                 }
@@ -227,7 +227,7 @@ namespace FASTER.core
         CreatePendingContext:
             {
                 pendingContext.type = OperationType.READ;
-                if (!pendingContext.skipKeyVerification)    // If this is true, we don't have a valid key
+                if (!pendingContext.NoKey)    // If this is true, we don't have a valid key
                     pendingContext.key = hlog.GetKeyContainer(ref key);
                 pendingContext.input = fasterSession.GetHeapContainer(ref input);
                 pendingContext.output = output;
@@ -1235,13 +1235,13 @@ namespace FASTER.core
                 if (hlog.GetInfoFromBytePointer(request.record.GetValidPointer()).Tombstone)
                     return OperationStatus.NOTFOUND;
 
-                // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
-                ref Key key = ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
+                // If NoKey, we do not have the key in the initial call and must use the key from the satisfied request.
+                ref Key key = ref pendingContext.NoKey ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
 
                 fasterSession.SingleReader(ref key, ref pendingContext.input.Get(),
                                        ref hlog.GetContextRecordValue(ref request), ref pendingContext.output, request.logicalAddress);
 
-                if (CopyReadsToTail || UseReadCache)
+                if ((CopyReadsToTail && !pendingContext.ReadByAddress) || UseReadCache)
                 {
                     InternalContinuePendingReadCopyToTail(ctx, request, ref pendingContext, fasterSession, currentCtx);
                 }
@@ -1276,8 +1276,8 @@ namespace FASTER.core
             var logicalAddress = Constants.kInvalidAddress;
             var physicalAddress = default(long);
 
-            // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
-            ref Key key = ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
+            // If NoKey, we do not have the key in the initial call and must use the key from the satisfied request.
+            ref Key key = ref pendingContext.NoKey ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
 
             var hash = comparer.GetHashCode64(ref key);
             var tag = (ushort)((ulong)hash >> Constants.kHashTagShift);

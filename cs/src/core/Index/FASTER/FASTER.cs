@@ -25,7 +25,7 @@ namespace FASTER.core
         protected readonly IFasterEqualityComparer<Key> comparer;
 
         internal readonly bool UseReadCache;
-        private readonly bool CopyReadsToTail;
+        internal readonly bool CopyReadsToTail;
         private readonly bool FoldOverSnapshot;
         internal readonly int sectorSize;
         internal bool RelaxedCPR;
@@ -500,6 +500,7 @@ namespace FASTER.core
             where FasterSession : IFasterSession<Key, Value, Input, Output, Context>
         {
             var pcontext = default(PendingContext<Input, Output, Context>);
+            pcontext.ReadByAddress = true;
             var internalStatus = InternalRead(ref key, ref input, ref output, recordInfo.PreviousAddress, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
             Debug.Assert(internalStatus != OperationStatus.RETRY_NOW);
 
@@ -526,7 +527,8 @@ namespace FASTER.core
             where FasterSession : IFasterSession<Key, Value, Input, Output, Context>
         {
             var pcontext = default(PendingContext<Input, Output, Context>);
-            pcontext.skipKeyVerification = true;
+            pcontext.NoKey = true;
+            pcontext.ReadByAddress = true;
             Key key = default;
             var internalStatus = InternalRead(ref key, ref input, ref output, address, ref context, ref pcontext, fasterSession, sessionCtx, serialNo);
             Debug.Assert(internalStatus != OperationStatus.RETRY_NOW);

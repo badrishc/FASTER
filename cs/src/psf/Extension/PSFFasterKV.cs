@@ -174,11 +174,11 @@ namespace FASTER.PSF
                                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, TInput> variableLengthStruct = null)
             where Functions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
+            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, this.fkv.RecordAccessor, this.psfManager);
             var session = this.fkv.For(indexingFunctions).NewSession(indexingFunctions, sessionId, threadAffinitized, variableLengthStruct);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this.fkv);
             var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, this.fkv.RecordAccessor, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
+            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.fkv, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
         }
 
         /// <summary>
@@ -220,11 +220,11 @@ namespace FASTER.PSF
                                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
             where Functions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.fkv.Log, this.fkv.RecordAccessor, this.psfManager);
+            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, this.fkv.RecordAccessor, this.psfManager);
             var session = this.fkv.For(indexingFunctions).ResumeSession(indexingFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this.fkv);
             var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.Log, this.fkv.RecordAccessor, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
+            return new PSFClientSession<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.fkv, indexingFunctions, session, session.SupportAsync, livenessSession, this.psfManager);
         }
 
         #endregion New Session Operations
@@ -364,7 +364,7 @@ namespace FASTER.PSF
         /// <param name="wait">Synchronous wait for operation to complete</param>
         public void Flush(bool wait)
         {
-            this.fkv.Log.Flush(wait);
+            this.Log.Flush(wait);
             this.psfManager.Flush(wait);
         }
 
@@ -374,7 +374,7 @@ namespace FASTER.PSF
         /// <param name="wait">Wait for operation to complete</param>
         public void FlushAndEvict(bool wait)
         {
-            this.fkv.Log.FlushAndEvict(wait);
+            this.Log.FlushAndEvict(wait);
             this.psfManager.FlushAndEvict(wait);
         }
 
@@ -384,7 +384,7 @@ namespace FASTER.PSF
         /// </summary>
         public void DisposeFromMemory()
         {
-            this.fkv.Log.DisposeFromMemory();
+            this.Log.DisposeFromMemory();
             this.psfManager.DisposeFromMemory();
         }
         #endregion Flush implementations (LogAccessor is not available on PSFFasterKV)

@@ -351,8 +351,8 @@ namespace FASTER.core
         {
             newRequest = default;
 
-            // If skipKeyVerification, we do not have the key in the initial call and must use the key from the satisfied request.
-            ref Key key = ref pendingContext.skipKeyVerification ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
+            // If NoKey, we do not have the key in the initial call and must use the key from the satisfied request.
+            ref Key key = ref pendingContext.NoKey ? ref hlog.GetContextRecordKey(ref request) : ref pendingContext.key.Get();
             OperationStatus internalStatus;
 
             // Issue the continue command

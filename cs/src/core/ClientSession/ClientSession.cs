@@ -39,6 +39,8 @@ namespace FASTER.core
 
         internal readonly AsyncFasterSession FasterSession;
 
+        internal const string NotAsyncSessionErr = "Session does not support async operations";
+
         internal ClientSession(
             FasterKV<Key, Value> fht,
             FasterKV<Key, Value>.FasterExecutionContext<Input, Output, Context> ctx,
@@ -183,7 +185,7 @@ namespace FASTER.core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
-            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Debug.Assert(SupportAsync, NotAsyncSessionErr);
             return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, cancellationToken);
         }
 
@@ -191,7 +193,7 @@ namespace FASTER.core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(Key key, Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
-            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Debug.Assert(SupportAsync, NotAsyncSessionErr);
             return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
         }
 
@@ -199,7 +201,7 @@ namespace FASTER.core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(ref Key key, Context userContext = default, long serialNo = 0, CancellationToken token = default)
         {
-            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Debug.Assert(SupportAsync, NotAsyncSessionErr);
             Input input = default;
             return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, userContext, serialNo, token);
         }
@@ -208,7 +210,7 @@ namespace FASTER.core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAsync(Key key, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
-            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Debug.Assert(SupportAsync, NotAsyncSessionErr);
             Input input = default;
             return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, Constants.kInvalidAddress, context, serialNo, token);
         }
@@ -224,9 +226,9 @@ namespace FASTER.core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.ReadAsyncResult<Input, Output, Context>> ReadAtAddressAsync(long address, ref Input input, Context userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
-            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Debug.Assert(SupportAsync, NotAsyncSessionErr);
             Key key = default;
-            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, address, userContext, serialNo, cancellationToken, noKey: true);
+            return fht.ReadAsync(this.FasterSession, this.ctx, ref key, ref input, address, userContext, serialNo, cancellationToken, FasterKV<Key, Value>.PendingContext<Input, Output, Context>.kNoKey);
         }
 
         /// <inheritdoc/>
@@ -273,7 +275,7 @@ namespace FASTER.core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask<FasterKV<Key, Value>.RmwAsyncResult<Input, Output, Context>> RMWAsync(ref Key key, ref Input input, Context context = default, long serialNo = 0, CancellationToken token = default)
         {
-            Debug.Assert(SupportAsync, "Session does not support async operations");
+            Debug.Assert(SupportAsync, NotAsyncSessionErr);
             return fht.RmwAsync(this.FasterSession, this.ctx, ref key, ref input, context, serialNo, token);
         }
 

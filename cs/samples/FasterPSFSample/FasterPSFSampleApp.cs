@@ -267,8 +267,8 @@ namespace FasterPSFSample
                 }
             }
             Console.WriteLine(providerDatas.Length == expectedCount
-                              ? $"Passed: expected == actual ({expectedCount})"
-                              : $"Failed: expected ({expectedCount}) != actual ({providerDatas.Length})");
+                              ? $"Passed: expected == actual ({expectedCount:N0})"
+                              : $"Failed: expected ({expectedCount:N0}) != actual ({providerDatas.Length:N0})");
             totalCount += providerDatas.Length;
             return expectedCount == providerDatas.Length;
         }
@@ -507,12 +507,12 @@ namespace FasterPSFSample
 
             var tag = isInitial ? "Initial" : (isDelete ? "Deleted" : "Updated");
             if (expectedCount == actualCount && allResultsMatch) { 
-                Console.WriteLine($"{indent4}{tag} {name} Passed: expected == actual ({expectedCount})");
+                Console.WriteLine($"{indent4}{tag} {name} Passed: expected == actual ({expectedCount:N0})");
                 return true;
             }
             Console.WriteLine(expectedCount == actualCount
-                                ? $"{indent4}{tag} {name} Failed: expected == actual ({expectedCount}), but not all results matched"
-                                : $"{indent4}{tag} {name} Failed: expected ({expectedCount}) != actual ({actualCount})");
+                                ? $"{indent4}{tag} {name} Failed: expected == actual ({expectedCount:N0}), but not all results matched"
+                                : $"{indent4}{tag} {name} Failed: expected ({expectedCount:N0}) != actual ({actualCount:N0})");
             return false;
         }
 
