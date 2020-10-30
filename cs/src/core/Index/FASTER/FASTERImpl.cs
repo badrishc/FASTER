@@ -322,11 +322,7 @@ namespace FASTER.core
                     logicalAddress = hlog.GetInfo(physicalAddress).PreviousAddress;
                     TraceBackForKeyMatch(ref key,
                                         logicalAddress,
-#if PSF_DLL
-                                        hlog.HeadAddress,
-#else
                                         hlog.ReadOnlyAddress,
-#endif
                                         out logicalAddress,
                                         out physicalAddress);
                 }

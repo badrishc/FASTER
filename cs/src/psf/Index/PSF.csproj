@@ -20,17 +20,17 @@
     <AssemblyOriginatorKeyFile>../../../FASTER.snk</AssemblyOriginatorKeyFile>
     <DelaySign>false</DelaySign>
     <DocumentationFile>bin\$(Platform)\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DefineConstants>PSF_DLL;TRACE;DEBUG</DefineConstants>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
     <DebugType>full</DebugType>
     <OutputPath>bin\$(Platform)\Debug\</OutputPath>
   </PropertyGroup>
   
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DefineConstants>PSF_DLL;TRACE</DefineConstants>
-    <DebugType>pdbonly</DebugType>
+    <DefineConstants>TRACE</DefineConstants>
     <Optimize>true</Optimize>
     <OutputPath>bin\$(Platform)\Release\</OutputPath>
   </PropertyGroup>
