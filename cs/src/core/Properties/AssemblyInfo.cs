@@ -22,8 +22,8 @@ using System.Runtime.InteropServices;
 [assembly: Guid("01002755-60ca-40ee-94d9-11c07eb58786")]
 
 [assembly: InternalsVisibleTo("FASTER.test" + AssemblyRef.FASTERPublicKey)]
-[assembly: InternalsVisibleTo("FASTER.PSF" + AssemblyRef.FASTERPublicKey)]
-[assembly: InternalsVisibleTo("PSF" + AssemblyRef.FASTERPublicKey)]
+[assembly: InternalsVisibleTo("FASTER.indexes.SubsetHashIndex" + AssemblyRef.FASTERPublicKey)]
+[assembly: InternalsVisibleTo("FASTER.libraries.SubsetHashIndex" + AssemblyRef.FASTERPublicKey)]
 
 /// <summary>
 /// Sets public key string for friend assemblies.
