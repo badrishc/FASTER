@@ -244,7 +244,7 @@ namespace FASTER.core
         /// fail if we are already taking a checkpoint or performing some other
         /// operation such as growing the index). Use CompleteCheckpointAsync to wait completion.
         /// </returns>
-        public bool TakeFullCheckpoint(out Guid token)
+        public virtual bool TakeFullCheckpoint(out Guid token)
         {
             ISynchronizationTask backend;
             if (FoldOverSnapshot)
@@ -267,7 +267,7 @@ namespace FASTER.core
         /// fail if we are already taking a checkpoint or performing some other
         /// operation such as growing the index). Use CompleteCheckpointAsync to wait completion.
         /// </returns>
-        public bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType)
+        public virtual bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType)
         {
             ISynchronizationTask backend;
             if (checkpointType == CheckpointType.FoldOver)
@@ -298,7 +298,7 @@ namespace FASTER.core
         /// token: Token for taken checkpoint
         /// Await task to complete checkpoint, if initiated successfully
         /// </returns>
-        public async ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
+        public virtual async ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
         {
             var success = TakeFullCheckpoint(out Guid token, checkpointType);
 
@@ -313,7 +313,7 @@ namespace FASTER.core
         /// </summary>
         /// <param name="token">Checkpoint token</param>
         /// <returns>Whether we could initiate the checkpoint. Use CompleteCheckpointAsync to wait completion.</returns>
-        public bool TakeIndexCheckpoint(out Guid token)
+        public virtual bool TakeIndexCheckpoint(out Guid token)
         {
             var result = StartStateMachine(new IndexSnapshotStateMachine());
             token = _indexCheckpointToken;
@@ -332,7 +332,7 @@ namespace FASTER.core
         /// token: Token for taken checkpoint
         /// Await task to complete checkpoint, if initiated successfully
         /// </returns>
-        public async ValueTask<(bool success, Guid token)> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default)
+        public virtual async ValueTask<(bool success, Guid token)> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default)
         {
             var success = TakeIndexCheckpoint(out Guid token);
 
@@ -347,7 +347,7 @@ namespace FASTER.core
         /// </summary>
         /// <param name="token">Checkpoint token</param>
         /// <returns>Whether we could initiate the checkpoint. Use CompleteCheckpointAsync to wait completion.</returns>
-        public bool TakeHybridLogCheckpoint(out Guid token)
+        public virtual bool TakeHybridLogCheckpoint(out Guid token)
         {
             ISynchronizationTask backend;
             if (FoldOverSnapshot)
@@ -366,7 +366,7 @@ namespace FASTER.core
         /// <param name="token">Checkpoint token</param>
         /// <param name="checkpointType">Checkpoint type</param>
         /// <returns>Whether we could initiate the checkpoint. Use CompleteCheckpointAsync to wait completion.</returns>
-        public bool TakeHybridLogCheckpoint(out Guid token, CheckpointType checkpointType)
+        public virtual bool TakeHybridLogCheckpoint(out Guid token, CheckpointType checkpointType)
         {
             ISynchronizationTask backend;
             if (checkpointType == CheckpointType.FoldOver)
@@ -394,7 +394,7 @@ namespace FASTER.core
         /// token: Token for taken checkpoint
         /// Await task to complete checkpoint, if initiated successfully
         /// </returns>
-        public async ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
+        public virtual async ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
         {
             var success = TakeHybridLogCheckpoint(out Guid token, checkpointType);
 
@@ -409,7 +409,7 @@ namespace FASTER.core
         /// </summary>
         /// <param name="numPagesToPreload">Number of pages to preload into memory (beyond what needs to be read for recovery)</param>
         /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>
-        public void Recover(int numPagesToPreload = -1, bool undoFutureVersions = true)
+        public virtual void Recover(int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
             InternalRecoverFromLatestCheckpoints(numPagesToPreload, undoFutureVersions);
         }
@@ -420,7 +420,7 @@ namespace FASTER.core
         /// <param name="fullCheckpointToken">Token</param>
         /// <param name="numPagesToPreload">Number of pages to preload into memory after recovery</param>
         /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>
-        public void Recover(Guid fullCheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
+        public virtual void Recover(Guid fullCheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
             InternalRecover(fullCheckpointToken, fullCheckpointToken, numPagesToPreload, undoFutureVersions);
         }
@@ -432,7 +432,7 @@ namespace FASTER.core
         /// <param name="hybridLogCheckpointToken"></param>
         /// <param name="numPagesToPreload">Number of pages to preload into memory after recovery</param>
         /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>
-        public void Recover(Guid indexCheckpointToken, Guid hybridLogCheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
+        public virtual void Recover(Guid indexCheckpointToken, Guid hybridLogCheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
             InternalRecover(indexCheckpointToken, hybridLogCheckpointToken, numPagesToPreload, undoFutureVersions);
         }
@@ -441,7 +441,7 @@ namespace FASTER.core
         /// Wait for ongoing checkpoint to complete
         /// </summary>
         /// <returns></returns>
-        public async ValueTask CompleteCheckpointAsync(CancellationToken token = default)
+        public virtual async ValueTask CompleteCheckpointAsync(CancellationToken token = default)
         {
             if (LightEpoch.AnyInstanceProtected())
                 throw new FasterException("Cannot use CompleteCheckpointAsync when using legacy or non-async sessions");
@@ -638,7 +638,7 @@ namespace FASTER.core
         /// Grow the hash index
         /// </summary>
         /// <returns>Whether the request succeeded</returns>
-        public bool GrowIndex()
+        public virtual bool GrowIndex()
         {
             return StartStateMachine(new IndexResizeStateMachine());
         }
@@ -646,7 +646,7 @@ namespace FASTER.core
         /// <summary>
         /// Dispose FASTER instance
         /// </summary>
-        public void Dispose()
+        public virtual void Dispose()
         {
             Free();
             hlog.Dispose();

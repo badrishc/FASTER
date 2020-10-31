@@ -12,11 +12,10 @@ using System.Runtime.CompilerServices;
 namespace FASTER.indexes.SubsetHashIndex
 {
     /// <summary>
-    /// SubsetHashIndex-enabled wrapper FasterKV
+    /// SubsetHashIndex-enabled wrapper for FasterKV
     /// </summary>
-    public partial class FasterKVForSHI<TKVKey, TKVValue> : IFasterKV<TKVKey, TKVValue>
+    public partial class FasterKVForSHI<TKVKey, TKVValue> : FasterKV<TKVKey, TKVValue>
     {
-        private readonly FasterKV<TKVKey, TKVValue> fkv;
         private readonly SubsetHashIndex<FasterKVProviderData<TKVKey, TKVValue>, long> subsetHashIndex;
 
         /// <summary>
@@ -32,11 +31,10 @@ namespace FASTER.indexes.SubsetHashIndex
                            CheckpointSettings checkpointSettings = null, SerializerSettings<TKVKey, TKVValue> serializerSettings = null,
                            IFasterEqualityComparer<TKVKey> comparer = null,
                            VariableLengthStructSettings<TKVKey, TKVValue> variableLengthStructSettings = null)
+            : base(size, logSettings, checkpointSettings, serializerSettings, comparer, variableLengthStructSettings)
         {
-            this.fkv = new FasterKV<TKVKey, TKVValue>(size, logSettings, checkpointSettings, serializerSettings, comparer, variableLengthStructSettings);
             this.subsetHashIndex = new SubsetHashIndex<FasterKVProviderData<TKVKey, TKVValue>, long>();
         }
-
 
         #region Predicate Registration API
         /// <inheritdoc/>
@@ -69,33 +67,44 @@ namespace FASTER.indexes.SubsetHashIndex
         #region New Session Operations
 
         #region Unavailable New Session Operations
+#pragma warning disable CS0809 // Obsolete member overrides non-obsolete member
 
-        const string MustUseSubsetHashIndexSessionErr = "SubsetHashIndex sessions must use NewSessionForSHI";
+        const string MustUseSubsetHashIndexSessionErr = "SubsetHashIndex sessions must use ForSHI instead of For and NewSessionForSHI instead of NewSession";
 
         /// <inheritdoc/>
         [Obsolete(MustUseSubsetHashIndexSessionErr, true)]
-        public ClientSession<TKVKey, TKVValue, Input, Output, Context, IFunctions<TKVKey, TKVValue, Input, Output, Context>> NewSession<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
+
+        public override ClientSessionBuilder<Input, Output, Context> For<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
+            => throw new InvalidOperationExceptionSHI(MustUseSubsetHashIndexSessionErr);
+
+        /// <inheritdoc/>
+        public override AdvancedClientSessionBuilder<Input, Output, Context> For<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
+            => throw new InvalidOperationExceptionSHI(MustUseSubsetHashIndexSessionErr);
+
+        /// <inheritdoc/>
+        public override ClientSession<TKVKey, TKVValue, Input, Output, Context, IFunctions<TKVKey, TKVValue, Input, Output, Context>> NewSession<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
                 string sessionId = null, bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, Input> sessionVariableLengthStructSettings = null)
             => throw new InvalidOperationExceptionSHI(MustUseSubsetHashIndexSessionErr);
 
         /// <inheritdoc/>
         [Obsolete(MustUseSubsetHashIndexSessionErr, true)]
-        public AdvancedClientSession<TKVKey, TKVValue, Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>> NewSession<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
+        public override AdvancedClientSession<TKVKey, TKVValue, Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>> NewSession<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
                 string sessionId = null, bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, Input> sessionVariableLengthStructSettings = null)
             => throw new InvalidOperationExceptionSHI(MustUseSubsetHashIndexSessionErr);
 
         /// <inheritdoc/>
         [Obsolete(MustUseSubsetHashIndexSessionErr, true)]
-        public ClientSession<TKVKey, TKVValue, Input, Output, Context, IFunctions<TKVKey, TKVValue, Input, Output, Context>> ResumeSession<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
+        public override ClientSession<TKVKey, TKVValue, Input, Output, Context, IFunctions<TKVKey, TKVValue, Input, Output, Context>> ResumeSession<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
                 string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, Input> sessionVariableLengthStructSettings = null)
             => throw new InvalidOperationExceptionSHI(MustUseSubsetHashIndexSessionErr);
 
         /// <inheritdoc/>
         [Obsolete(MustUseSubsetHashIndexSessionErr, true)]
-        public AdvancedClientSession<TKVKey, TKVValue, Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>> ResumeSession<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
+        public override AdvancedClientSession<TKVKey, TKVValue, Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>> ResumeSession<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions,
                 string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, Input> sessionVariableLengthStructSettings = null)
             => throw new InvalidOperationExceptionSHI(MustUseSubsetHashIndexSessionErr);
 
+#pragma warning restore CS0809 // Obsolete member overrides non-obsolete member
         #endregion Unavailable New Session Operations
 
         /// <summary>
@@ -105,7 +114,7 @@ namespace FASTER.indexes.SubsetHashIndex
         /// <typeparam name="Output"></typeparam>
         /// <typeparam name="Context"></typeparam>
         /// <returns></returns>
-        public ClientSessionBuilderForSHI<Input, Output, Context> For<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
+        public ClientSessionBuilderForSHI<Input, Output, Context> ForSHI<Input, Output, Context>(IFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
         {
             return new ClientSessionBuilderForSHI<Input, Output, Context>(this, functions);
         }
@@ -117,7 +126,7 @@ namespace FASTER.indexes.SubsetHashIndex
         /// <typeparam name="Output"></typeparam>
         /// <typeparam name="Context"></typeparam>
         /// <returns></returns>
-        public AdvancedClientSessionBuilderForSHI<Input, Output, Context> For<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
+        public AdvancedClientSessionBuilderForSHI<Input, Output, Context> ForSHI<Input, Output, Context>(IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
         {
             return new AdvancedClientSessionBuilderForSHI<Input, Output, Context>(this, functions);
         }
@@ -158,11 +167,11 @@ namespace FASTER.indexes.SubsetHashIndex
                                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, TInput> variableLengthStruct = null)
             where Functions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, this.fkv.RecordAccessor, this.subsetHashIndex);
-            var session = this.fkv.For(indexingFunctions).NewSession(indexingFunctions, sessionId, threadAffinitized, variableLengthStruct);
-            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this.fkv);
-            var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new ClientSessionForSHI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.fkv, indexingFunctions, session, session.SupportAsync, livenessSession, this.subsetHashIndex);
+            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, base.RecordAccessor, this.subsetHashIndex);
+            var session = base.For(indexingFunctions).NewSession(indexingFunctions, sessionId, threadAffinitized, variableLengthStruct);
+            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this);
+            var livenessSession = base.NewSession(livenessFunctions);
+            return new ClientSessionForSHI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this, indexingFunctions, session, session.SupportAsync, livenessSession, this.subsetHashIndex);
         }
 
         /// <summary>
@@ -204,11 +213,11 @@ namespace FASTER.indexes.SubsetHashIndex
                                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
             where Functions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, this.fkv.RecordAccessor, this.subsetHashIndex);
-            var session = this.fkv.For(indexingFunctions).ResumeSession(indexingFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
-            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this.fkv);
-            var livenessSession = this.fkv.NewSession(livenessFunctions);
-            return new ClientSessionForSHI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this.fkv, indexingFunctions, session, session.SupportAsync, livenessSession, this.subsetHashIndex);
+            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, base.RecordAccessor, this.subsetHashIndex);
+            var session = base.For(indexingFunctions).ResumeSession(indexingFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
+            var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this);
+            var livenessSession = base.NewSession(livenessFunctions);
+            return new ClientSessionForSHI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this, indexingFunctions, session, session.SupportAsync, livenessSession, this.subsetHashIndex);
         }
 
         #endregion New Session Operations
@@ -217,96 +226,96 @@ namespace FASTER.indexes.SubsetHashIndex
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool GrowIndex()
-            => this.fkv.GrowIndex() && this.subsetHashIndex.GrowIndex();
+        public override bool GrowIndex()
+            => base.GrowIndex() && this.subsetHashIndex.GrowIndex();
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeFullCheckpoint(out Guid token)
+        public override bool TakeFullCheckpoint(out Guid token)
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeFullCheckpoint
-            => this.fkv.TakeFullCheckpoint(out token) && this.subsetHashIndex.TakeFullCheckpoint();
+            => base.TakeFullCheckpoint(out token) && this.subsetHashIndex.TakeFullCheckpoint();
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType)
+        public override bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType)
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeFullCheckpoint
-            => this.fkv.TakeFullCheckpoint(out token, checkpointType) && this.subsetHashIndex.TakeFullCheckpoint(checkpointType);
+            => base.TakeFullCheckpoint(out token, checkpointType) && this.subsetHashIndex.TakeFullCheckpoint(checkpointType);
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
+        public override async ValueTask<(bool success, Guid token)> TakeFullCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
         {
-            var (success, token) = await this.fkv.TakeFullCheckpointAsync(checkpointType, cancellationToken);
+            var (success, token) = await base.TakeFullCheckpointAsync(checkpointType, cancellationToken);
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeFullCheckpoint
             return (success && await this.subsetHashIndex.TakeFullCheckpointAsync(checkpointType, cancellationToken), token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeIndexCheckpoint(out Guid token)
+        public override bool TakeIndexCheckpoint(out Guid token)
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeIndexCheckpoint
-            => this.fkv.TakeIndexCheckpoint(out token) && this.subsetHashIndex.TakeIndexCheckpoint();
+            => base.TakeIndexCheckpoint(out token) && this.subsetHashIndex.TakeIndexCheckpoint();
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async ValueTask<(bool success, Guid token)> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default)
+        public override async ValueTask<(bool success, Guid token)> TakeIndexCheckpointAsync(CancellationToken cancellationToken = default)
         {
-            var (success, token) = await this.fkv.TakeIndexCheckpointAsync(cancellationToken);
+            var (success, token) = await base.TakeIndexCheckpointAsync(cancellationToken);
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeIndexCheckpoint
             return (success && await this.subsetHashIndex.TakeIndexCheckpointAsync(cancellationToken), token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeHybridLogCheckpoint(out Guid token)
+        public override bool TakeHybridLogCheckpoint(out Guid token)
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeHybridLogCheckpoint
-            => this.fkv.TakeHybridLogCheckpoint(out token) && this.subsetHashIndex.TakeHybridLogCheckpoint();
+            => base.TakeHybridLogCheckpoint(out token) && this.subsetHashIndex.TakeHybridLogCheckpoint();
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool TakeHybridLogCheckpoint(out Guid token, CheckpointType checkpointType)
+        public override bool TakeHybridLogCheckpoint(out Guid token, CheckpointType checkpointType)
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeHybridLogCheckpoint
-            => this.fkv.TakeHybridLogCheckpoint(out token, checkpointType) && this.subsetHashIndex.TakeHybridLogCheckpoint(checkpointType);
+            => base.TakeHybridLogCheckpoint(out token, checkpointType) && this.subsetHashIndex.TakeHybridLogCheckpoint(checkpointType);
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
+        public override async ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default)
         {
-            var (success, token) = await this.fkv.TakeHybridLogCheckpointAsync(checkpointType, cancellationToken);
+            var (success, token) = await base.TakeHybridLogCheckpointAsync(checkpointType, cancellationToken);
             // Do not return the Index token here. TODO: Handle failure of SubsetHashIndex.TakeHybridLogCheckpoint
             return (success && await this.subsetHashIndex.TakeHybridLogCheckpointAsync(checkpointType, cancellationToken), token);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Recover(int numPagesToPreload = -1, bool undoFutureVersions = true)
+        public override void Recover(int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
             // TODO: RecoverAsync with separate Tasks for primary fkv and each Group
-            this.fkv.Recover(numPagesToPreload, undoFutureVersions);
+            base.Recover(numPagesToPreload, undoFutureVersions);
             this.subsetHashIndex.Recover();
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Recover(Guid fullcheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
+        public override void Recover(Guid fullcheckpointToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            this.fkv.Recover(fullcheckpointToken, numPagesToPreload, undoFutureVersions);
+            base.Recover(fullcheckpointToken, numPagesToPreload, undoFutureVersions);
             this.subsetHashIndex.Recover(fullcheckpointToken);
         }
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Recover(Guid indexToken, Guid hybridLogToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
+        public override void Recover(Guid indexToken, Guid hybridLogToken, int numPagesToPreload = -1, bool undoFutureVersions = true)
         {
-            this.fkv.Recover(indexToken, hybridLogToken, numPagesToPreload, undoFutureVersions);
+            base.Recover(indexToken, hybridLogToken, numPagesToPreload, undoFutureVersions);
             this.subsetHashIndex.Recover(indexToken, hybridLogToken);
         }
 
         /// <inheritdoc/>
-        public async ValueTask CompleteCheckpointAsync(CancellationToken token = default)
+        public override async ValueTask CompleteCheckpointAsync(CancellationToken token = default)
         {
             // Simple sequence to avoid allocating Tasks as there is no Task.WhenAll for ValueTask
-            var vt1 = this.fkv.CompleteCheckpointAsync(token);
+            var vt1 = base.CompleteCheckpointAsync(token);
             var vt2 = this.subsetHashIndex.CompleteCheckpointAsync(token);
             await vt1;
             await vt2;
@@ -314,30 +323,8 @@ namespace FASTER.indexes.SubsetHashIndex
 
         #endregion Growth and Recovery
 
-        #region Other Operations
-
         /// <inheritdoc/>
-        public long EntryCount => this.fkv.EntryCount;
-
-        /// <inheritdoc/>
-        public long IndexSize => this.fkv.IndexSize;
-
-        /// <inheritdoc/>
-        public IFasterEqualityComparer<TKVKey> Comparer => this.fkv.Comparer;
-
-        /// <inheritdoc/>
-        public string DumpDistribution() => this.fkv.DumpDistribution();
-
-        /// <inheritdoc/>
-        public LogAccessor<TKVKey, TKVValue> Log => this.fkv.Log;
-
-        /// <inheritdoc/>
-        public LogAccessor<TKVKey, TKVValue> ReadCache => this.fkv.ReadCache;
-
-        #endregion Other Operations
-
-        /// <inheritdoc/>
-        public void Dispose() => this.fkv.Dispose();
+        public override void Dispose() => base.Dispose();
 
         #endregion IFasterKV implementations
 

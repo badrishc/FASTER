@@ -98,7 +98,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine($"Writing keys from 0 to {keyCount:N0} to FASTER");
 
             var rng = new Random(13);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
             var context = new Context<TValue>();
             var input = default(TInput);
             int statusPending = 0;
@@ -307,7 +307,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             var sw = new Stopwatch();
             sw.Start();
@@ -362,7 +362,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             var sw = new Stopwatch();
             sw.Start();
@@ -541,7 +541,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             FasterKVProviderData<Key, TValue>[] GetSizeDatas(Constants.Size size)
                 => useMultiGroups
@@ -601,7 +601,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             FasterKVProviderData<Key, TValue>[] GetColorDatas(Color color)
                 => useMultiGroups
@@ -653,7 +653,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             var sw = new Stopwatch();
             sw.Start();
@@ -716,7 +716,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             var sw = new Stopwatch();
             sw.Start();
@@ -764,7 +764,7 @@ namespace SubsetHashIndexSample
             Console.WriteLine(activity);
 
             FlushAndEvictIfRequested(store);
-            using var session = store.FasterKV.For(new TFunctions()).NewSession<TFunctions>();
+            using var session = store.FasterKV.ForSHI(new TFunctions()).NewSession<TFunctions>();
 
             var sw = new Stopwatch();
             sw.Start();

@@ -203,7 +203,7 @@ namespace FASTER.core
         /// <typeparam name="Output"></typeparam>
         /// <typeparam name="Context"></typeparam>
         /// <returns></returns>
-        public ClientSessionBuilder<Input, Output, Context> For<Input, Output, Context>(IFunctions<Key, Value, Input, Output, Context> functions)
+        public virtual ClientSessionBuilder<Input, Output, Context> For<Input, Output, Context>(IFunctions<Key, Value, Input, Output, Context> functions)
         {
             return new ClientSessionBuilder<Input, Output, Context>(this, functions);
         }
@@ -215,7 +215,7 @@ namespace FASTER.core
         /// <typeparam name="Output"></typeparam>
         /// <typeparam name="Context"></typeparam>
         /// <returns></returns>
-        public AdvancedClientSessionBuilder<Input, Output, Context> For<Input, Output, Context>(IAdvancedFunctions<Key, Value, Input, Output, Context> functions)
+        public virtual AdvancedClientSessionBuilder<Input, Output, Context> For<Input, Output, Context>(IAdvancedFunctions<Key, Value, Input, Output, Context> functions)
         {
             return new AdvancedClientSessionBuilder<Input, Output, Context>(this, functions);
         }
@@ -230,7 +230,7 @@ namespace FASTER.core
         ///     Ensure thread calls session Refresh periodically to move the system epoch forward.</param>
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
-        public ClientSession<Key, Value, Input, Output, Context, IFunctions<Key, Value, Input, Output, Context>> NewSession<Input, Output, Context>(IFunctions<Key, Value, Input, Output, Context> functions, string sessionId = null,
+        public virtual ClientSession<Key, Value, Input, Output, Context, IFunctions<Key, Value, Input, Output, Context>> NewSession<Input, Output, Context>(IFunctions<Key, Value, Input, Output, Context> functions, string sessionId = null,
                 bool threadAffinitized = false, SessionVariableLengthStructSettings<Value, Input> sessionVariableLengthStructSettings = null)
         {
             return NewSession<Input, Output, Context, IFunctions<Key, Value, Input, Output, Context>>(functions, sessionId, threadAffinitized, sessionVariableLengthStructSettings);
@@ -261,7 +261,7 @@ namespace FASTER.core
         ///     Ensure thread calls session Refresh periodically to move the system epoch forward.</param>
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
-        public AdvancedClientSession<Key, Value, Input, Output, Context, IAdvancedFunctions<Key, Value, Input, Output, Context>> NewSession<Input, Output, Context>(IAdvancedFunctions<Key, Value, Input, Output, Context> functions,
+        public virtual AdvancedClientSession<Key, Value, Input, Output, Context, IAdvancedFunctions<Key, Value, Input, Output, Context>> NewSession<Input, Output, Context>(IAdvancedFunctions<Key, Value, Input, Output, Context> functions,
                 string sessionId = null, bool threadAffinitized = false, SessionVariableLengthStructSettings<Value, Input> sessionVariableLengthStructSettings = null)
         {
             return NewAdvancedSession<Input, Output, Context, IAdvancedFunctions<Key, Value, Input, Output, Context>>(functions, sessionId, threadAffinitized, sessionVariableLengthStructSettings);
@@ -322,7 +322,7 @@ namespace FASTER.core
         ///     Ensure thread calls session Refresh periodically to move the system epoch forward.</param>
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
-        public ClientSession<Key, Value, Input, Output, Context, IFunctions<Key, Value, Input, Output, Context>> ResumeSession<Input, Output, Context>(IFunctions<Key, Value, Input, Output, Context> functions, string sessionId,
+        public virtual ClientSession<Key, Value, Input, Output, Context, IFunctions<Key, Value, Input, Output, Context>> ResumeSession<Input, Output, Context>(IFunctions<Key, Value, Input, Output, Context> functions, string sessionId,
                 out CommitPoint commitPoint, bool threadAffinitized = false, SessionVariableLengthStructSettings<Value, Input> sessionVariableLengthStructSettings = null)
         {
             return ResumeSession<Input, Output, Context, IFunctions<Key, Value, Input, Output, Context>>(functions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
@@ -359,7 +359,7 @@ namespace FASTER.core
         ///     Ensure thread calls session Refresh periodically to move the system epoch forward.</param>
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
-        public AdvancedClientSession<Key, Value, Input, Output, Context, IAdvancedFunctions<Key, Value, Input, Output, Context>> ResumeSession<Input, Output, Context>(IAdvancedFunctions<Key, Value, Input, Output, Context> functions,
+        public virtual AdvancedClientSession<Key, Value, Input, Output, Context, IAdvancedFunctions<Key, Value, Input, Output, Context>> ResumeSession<Input, Output, Context>(IAdvancedFunctions<Key, Value, Input, Output, Context> functions,
                 string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false, SessionVariableLengthStructSettings<Value, Input> sessionVariableLengthStructSettings = null)
         {
             return ResumeAdvancedSession<Input, Output, Context, IAdvancedFunctions<Key, Value, Input, Output, Context>>(functions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
