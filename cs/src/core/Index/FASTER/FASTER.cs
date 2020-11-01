@@ -74,11 +74,11 @@ namespace FASTER.core
         /// Create FASTER instance
         /// </summary>
         /// <param name="size">Size of core index (#cache lines)</param>
-        /// <param name="comparer">FASTER equality comparer for key</param>
-        /// <param name="variableLengthStructSettings"></param>
         /// <param name="logSettings">Log settings</param>
         /// <param name="checkpointSettings">Checkpoint settings</param>
         /// <param name="serializerSettings">Serializer settings</param>
+        /// <param name="comparer">FASTER equality comparer for key</param>
+        /// <param name="variableLengthStructSettings"></param>
         public FasterKV(long size, LogSettings logSettings,
             CheckpointSettings checkpointSettings = null, SerializerSettings<Key, Value> serializerSettings = null,
             IFasterEqualityComparer<Key> comparer = null,

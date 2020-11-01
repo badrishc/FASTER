@@ -14,7 +14,7 @@ namespace FASTER.libraries.SubsetHashIndex
     ///     FasterKV instance</typeparam>
     /// <typeparam name="TRecordId">The type of data record supplied by the data provider; in FasterKV it 
     ///     is the logicalAddress of the record in the primary FasterKV instance.</typeparam>
-    public class Predicate<TPKey, TRecordId> : IPredicate
+    internal class Predicate<TPKey, TRecordId> : IPredicate
     {
         private readonly IQueryPredicate<TPKey, TRecordId> group;
 

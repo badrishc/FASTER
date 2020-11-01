@@ -4,6 +4,7 @@
 using FASTER.core;
 using FASTER.indexes.SubsetHashIndex;
 using FASTER.libraries.SubsetHashIndex;
+using static FASTER.indexes.SubsetHashIndex.ExtensionsForSHI;
 using System;
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
@@ -15,7 +16,7 @@ namespace SubsetHashIndexSample
         where TFunctions : IFunctions<Key, TValue, TInput, TOutput, Context<TValue>>
         where TSerializer : BinaryObjectSerializer<TValue>, new()
     {
-        internal FasterKVForSHI<Key, TValue> FasterKV { get; set; }
+        internal FasterKV<Key, TValue> FasterKV { get; set; }
 
         private LogFiles logFiles;
 
@@ -27,7 +28,7 @@ namespace SubsetHashIndexSample
         {
             this.logFiles = new LogFiles(SubsetHashIndexSampleApp.useMultiGroups ? 3 : 1);
 
-            this.FasterKV = new FasterKVForSHI<Key, TValue>(
+            this.FasterKV = NewFasterKVForSHI(
                                 1L << 20, this.logFiles.LogSettings,
                                 null, // TODO: add checkpoints
                                 SubsetHashIndexSampleApp.useObjectValues ? new SerializerSettings<Key, TValue> { valueSerializer = () => new TSerializer() } : null,
