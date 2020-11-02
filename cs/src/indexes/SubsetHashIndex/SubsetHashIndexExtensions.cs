@@ -11,7 +11,7 @@ namespace FASTER.indexes.SubsetHashIndex
     /// <summary>
     /// Extension methods on <see cref="FasterKVForSHI{TKVKey, TKVValue}"/> to support SHI.
     /// </summary>
-    public static class ExtensionsForSHI
+    public static class SubsetHashIndexExtensions
     {
         /// <summary>
         /// Obtain an instance of <see cref="FasterKV{Key, Value}"/> that supports a SubsetHashIndex.
@@ -22,7 +22,7 @@ namespace FASTER.indexes.SubsetHashIndex
         /// <param name="serializerSettings">Serializer settings</param>
         /// <param name="comparer">FASTER equality comparer for key</param>
         /// <param name="variableLengthStructSettings"></param>
-        public static FasterKV<TKVKey, TKVValue> NewFasterKVForSHI<TKVKey, TKVValue>(long size, LogSettings logSettings,
+        public static FasterKV<TKVKey, TKVValue> NewFasterKV<TKVKey, TKVValue>(long size, LogSettings logSettings,
                 CheckpointSettings checkpointSettings = null, SerializerSettings<TKVKey, TKVValue> serializerSettings = null,
                 IFasterEqualityComparer<TKVKey> comparer = null,
                 VariableLengthStructSettings<TKVKey, TKVValue> variableLengthStructSettings = null) 

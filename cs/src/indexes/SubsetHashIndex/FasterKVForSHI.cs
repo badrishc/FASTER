@@ -13,7 +13,7 @@ namespace FASTER.indexes.SubsetHashIndex
     /// <summary>
     /// SubsetHashIndex-enabled internal wrapper for <see cref="FasterKV{TKVKey, TKVValue}"/>. This overrides base methods that 
     /// must be handled differently for SHI-enabled FKVs; the implementation of those different methods, as well as the additional
-    /// methods for SHI, is in <see cref="ExtensionsForSHI"/>.
+    /// methods for SHI, is in <see cref="SubsetHashIndexExtensions"/>.
     /// </summary>
     internal class FasterKVForSHI<TKVKey, TKVValue> : FasterKV<TKVKey, TKVValue>
     {

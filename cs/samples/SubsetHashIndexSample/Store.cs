@@ -4,7 +4,6 @@
 using FASTER.core;
 using FASTER.indexes.SubsetHashIndex;
 using FASTER.libraries.SubsetHashIndex;
-using static FASTER.indexes.SubsetHashIndex.ExtensionsForSHI;
 using System;
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
@@ -28,7 +27,7 @@ namespace SubsetHashIndexSample
         {
             this.logFiles = new LogFiles(SubsetHashIndexSampleApp.useMultiGroups ? 3 : 1);
 
-            this.FasterKV = NewFasterKVForSHI(
+            this.FasterKV = SubsetHashIndexExtensions.NewFasterKV(
                                 1L << 20, this.logFiles.LogSettings,
                                 null, // TODO: add checkpoints
                                 SubsetHashIndexSampleApp.useObjectValues ? new SerializerSettings<Key, TValue> { valueSerializer = () => new TSerializer() } : null,
