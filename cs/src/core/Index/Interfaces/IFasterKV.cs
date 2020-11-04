@@ -93,7 +93,7 @@ namespace FASTER.core
         public bool TakeFullCheckpoint(out Guid token, CheckpointType checkpointType);
 
         /// <summary>
-        /// Takes a full (index + log) checkpoint of FASTER asynchronously
+        /// Take full (index + log) checkpoint of FASTER asynchronously
         /// </summary>
         /// <param name="checkpointType">The checkpoint type to use (ignores the checkpoint type specified in the <see cref="CheckpointSettings"/>)</param>
         /// <param name="cancellationToken">A token to cancel the operation</param>
@@ -151,7 +151,7 @@ namespace FASTER.core
         public ValueTask<(bool success, Guid token)> TakeHybridLogCheckpointAsync(CheckpointType checkpointType, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Recover from last successful checkpoints
+        /// Recover from last successful index and log checkpoints
         /// </summary>
         /// <param name="numPagesToPreload">Number of pages to preload into memory after recovery</param>
         /// <param name="undoFutureVersions">Whether records with versions beyond checkpoint version need to be undone (and invalidated on log)</param>

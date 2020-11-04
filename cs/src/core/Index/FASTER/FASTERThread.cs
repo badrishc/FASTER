@@ -322,7 +322,7 @@ namespace FASTER.core
             }
         }
 
-        internal unsafe void InternalCompletePendingRequest<Input, Output, Context, FasterSession>(
+        internal void InternalCompletePendingRequest<Input, Output, Context, FasterSession>(
             FasterExecutionContext<Input, Output, Context> opCtx, 
             FasterExecutionContext<Input, Output, Context> currentCtx, 
             FasterSession fasterSession, 

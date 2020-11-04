@@ -35,7 +35,6 @@ namespace FASTER.core
         public virtual void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) { }
     }
 
-
     /// <summary>
     /// Default empty functions base class to make it easy for users to provide their own implementation of FunctionsBase
     /// </summary>

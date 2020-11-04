@@ -95,8 +95,7 @@ namespace FASTER.core
                 set => operationFlags = value ? (byte)(operationFlags | kNoKey) : (byte)(operationFlags & ~kNoKey);
             }
 
-            // Note that this indicates the form of Read that takes an address or a RecordInfo; the latter includes when the address is not set
-            // so the Read looks up the key.
+            // This indicates the form of Read that takes an address or a RecordInfo (whether or not RecordInfo.PreviousAddress is set).
             internal bool ReadByAddress
             {
                 get => (operationFlags & kReadByAddress) != 0;

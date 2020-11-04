@@ -1,7 +1,6 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 #pragma warning disable 0162
 #define CPR
 
@@ -1063,9 +1062,6 @@ namespace FASTER.core
                                true, true, false,
                                latestLogicalAddress);
                 hlog.ShallowCopy(ref key, ref hlog.GetKey(newPhysicalAddress));
-
-                // Note: for indexing, we don't have the old value available if this is < HeadAddress, and since it is < ReadOnlyAddress
-                // and we do not have a callback to handle passing a "deleted" flag, we do nothing here. TODOperf: Add callback if >= HeadAddress.
 
                 var updatedEntry = default(HashBucketEntry);
                 updatedEntry.Tag = tag;
