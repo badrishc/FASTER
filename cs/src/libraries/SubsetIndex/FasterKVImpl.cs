@@ -380,17 +380,16 @@ namespace FASTER.libraries.SubsetIndex
             {
                 // Create the new record. Because we are updating multiple hash buckets, mark the record as invalid to start,
                 // so it is not visible until we have successfully updated all chains.
-                var recordSize = hlog.GetRecordSize(ref inputFirstKeyPointerRefAsKeyRef, ref value);
-                BlockAllocate(recordSize, out long newLogicalAddress, sessionCtx, fasterSession);
+                var (actualSize, allocateSize) = hlog.GetRecordSize(ref inputFirstKeyPointerRefAsKeyRef, ref value);
+                BlockAllocate(allocateSize, out long newLogicalAddress, sessionCtx, fasterSession);
                 var newPhysicalAddress = hlog.GetPhysicalAddress(newLogicalAddress);
                 RecordInfo.WriteInfo(ref hlog.GetInfo(newPhysicalAddress), sessionCtx.version,
                                      // tombstone is always false; see above setting of keyPointer.IsDelete.
                                      final: true, tombstone: false, invalidBit:true,
                                      core.Constants.kInvalidAddress);  // We manage all prev addresses within CompositeKey
-                ref TPKey storedFirstKeyPointerRefAsKeyRef = ref hlog.GetKey(newPhysicalAddress);
-                ref CompositeKey<TPKey> storedCompositeKey = ref CompositeKey<TPKey>.CastFromFirstKeyPointerRefAsKeyRef(ref storedFirstKeyPointerRefAsKeyRef);
-                hlog.ShallowCopy(ref inputFirstKeyPointerRefAsKeyRef, ref storedFirstKeyPointerRefAsKeyRef);
-                hlog.ShallowCopy(ref value, ref hlog.GetValue(newPhysicalAddress));
+                ref CompositeKey<TPKey> storedCompositeKey = ref CompositeKey<TPKey>.CastFromFirstKeyPointerRefAsKeyRef(ref hlog.GetKey(newPhysicalAddress));
+                hlog.Serialize(ref inputFirstKeyPointerRefAsKeyRef, newPhysicalAddress);
+                hlog.Serialize(ref value, newPhysicalAddress);
 
                 IndexTraceLine();
                 newLogicalAddress += RecordInfo.GetLength();

@@ -64,8 +64,11 @@ namespace FASTER.libraries.SubsetIndex
             public int GetLength(ref TPKey _) => this.size;
 
             public unsafe void Serialize(ref TPKey source, void* destination)
-                => Buffer.MemoryCopy(Unsafe.AsPointer(ref source), destination, GetLength(ref source), GetLength(ref source))
-            ;
+                => Buffer.MemoryCopy(Unsafe.AsPointer(ref source), destination, GetLength(ref source), GetLength(ref source));
+
+            public unsafe ref TPKey AsRef(void* source) => ref Unsafe.AsRef<TPKey>(source);
+
+            public unsafe void Initialize(void* source, void* end) { }
         }
 
         /// <summary>
