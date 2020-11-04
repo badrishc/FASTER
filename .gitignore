@@ -193,4 +193,5 @@ packages/
 *.lib
 nativebin/
 /cs/benchmark/Properties/launchSettings.json
+/cs/playground/**/launchSettings.json
 /cs/samples/**/launchSettings.json

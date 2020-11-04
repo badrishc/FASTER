@@ -61,11 +61,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SecondaryReaderStore", "sam
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VersionedRead", "samples\ReadAddress\VersionedRead.csproj", "{33ED9E1B-1EF0-4984-A07A-7A26C205A446}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FASTER.indexes.SubsetHashIndex", "src\indexes\SubsetHashIndex\FASTER.indexes.SubsetHashIndex.csproj", "{4EED88AA-585B-4EF7-BCE7-AC7E9B712107}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FASTER.indexes.SubsetIndex", "src\indexes\SubsetIndex\FASTER.indexes.SubsetIndex.csproj", "{4EED88AA-585B-4EF7-BCE7-AC7E9B712107}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FASTER.libraries.SubsetHashIndex", "src\libraries\SubsetHashIndex\FASTER.libraries.SubsetHashIndex.csproj", "{CD7A169D-B388-4BEB-924A-86C6C5A9B91A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FASTER.libraries.SubsetIndex", "src\libraries\SubsetIndex\FASTER.libraries.SubsetIndex.csproj", "{CD7A169D-B388-4BEB-924A-86C6C5A9B91A}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SubsetHashIndexSample", "samples\SubsetHashIndexSample\SubsetHashIndexSample.csproj", "{B0FA113D-44D7-44EF-9261-13AC8599F364}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SubsetIndex", "playground\SubsetIndex\SubsetIndex.csproj", "{B0FA113D-44D7-44EF-9261-13AC8599F364}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -290,7 +290,7 @@ Global
 		{33ED9E1B-1EF0-4984-A07A-7A26C205A446} = {62BC1134-B6E1-476A-B894-7CA278A8B6DE}
 		{4EED88AA-585B-4EF7-BCE7-AC7E9B712107} = {6689A4F3-E860-4E77-866D-B2E4450064F9}
 		{CD7A169D-B388-4BEB-924A-86C6C5A9B91A} = {B7C1A51D-791E-4E0E-BFDB-8378C81CA87C}
-		{B0FA113D-44D7-44EF-9261-13AC8599F364} = {62BC1134-B6E1-476A-B894-7CA278A8B6DE}
+		{B0FA113D-44D7-44EF-9261-13AC8599F364} = {E6026D6A-01C5-4582-B2C1-64751490DABE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A0750637-2CCB-4139-B25E-F2CE740DCFAC}
