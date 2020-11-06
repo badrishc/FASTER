@@ -168,7 +168,7 @@ namespace FASTER.indexes.SubsetIndex
         }
 
         public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint)
-            => CheckpointCompletionCallback(sessionId, commitPoint);
+            => this.userFunctions.CheckpointCompletionCallback(sessionId, commitPoint);
 
         #endregion IFunctions implementations
 

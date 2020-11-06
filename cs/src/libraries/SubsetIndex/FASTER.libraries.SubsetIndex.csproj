@@ -4,7 +4,7 @@
     <TargetFrameworks>netstandard2.1;netstandard2.0;net461</TargetFrameworks>
     <Platforms>AnyCPU;x64</Platforms>
     <LangVersion>8</LangVersion>
-    <PackageId>Microsoft.FASTER.libraries.SubsetHashIndex</PackageId>
+    <PackageId>Microsoft.FASTER.libraries.SubsetIndex</PackageId>
     <PackageOutputPath>$(SolutionDir)\build_output\packages</PackageOutputPath>
   </PropertyGroup>
 

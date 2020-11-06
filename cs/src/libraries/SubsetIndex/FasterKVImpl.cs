@@ -58,9 +58,8 @@ namespace FASTER.libraries.SubsetIndex
             }
             else
             {
-                logicalAddress = startAddress;
-                tagExists = logicalAddress >= hlog.BeginAddress;
-                entry.Address = logicalAddress;
+                tagExists = startAddress >= hlog.BeginAddress;
+                entry.Address = startAddress;
             }
 
             // The addresses stored in the hash table point to KeyPointer entries, not the record header.
@@ -104,8 +103,9 @@ namespace FASTER.libraries.SubsetIndex
                     var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(physicalAddress);
                     if (!comparer.Equals(ref queryKeyPointerRefAsKeyRef, ref hlog.GetKey(recordPhysicalAddress)))
                     {
-                        logicalAddress = queryKeyPointer.PreviousAddress;
-                        TraceBackForKeyMatch(ref queryKeyPointer,
+                        ref KeyPointer<TPKey> storedKeyPointer = ref KeyPointer<TPKey>.CastFromPhysicalAddress(physicalAddress);
+                        logicalAddress = storedKeyPointer.PreviousAddress;
+                        TraceBackForKeyMatch(ref queryKeyPointerRefAsKeyRef,
                                                 logicalAddress,
                                                 hlog.HeadAddress,
                                                 out logicalAddress,
@@ -214,7 +214,7 @@ namespace FASTER.libraries.SubsetIndex
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool TraceBackForKeyMatch(
-                                    ref KeyPointer<TPKey> keyPointer,
+                                    ref TPKey queryKeyPointerAsKeyRef,
                                     long fromLogicalAddress,
                                     long minOffset,
                                     out long foundLogicalAddress,
@@ -227,11 +227,11 @@ namespace FASTER.libraries.SubsetIndex
 
                 // The comparer is called during AsyncGetFromDiskCallback with a ref to the beginning of the stored CompsiteKey, so match that here.
                 var recordPhysicalAddress = this.KeyAccessor.GetRecordAddressFromKeyPointerAddress(foundPhysicalAddress);
-                if (comparer.Equals(ref keyPointer.Key, ref hlog.GetKey(recordPhysicalAddress)))
+                if (comparer.Equals(ref queryKeyPointerAsKeyRef, ref hlog.GetKey(recordPhysicalAddress)))
                     return true;
 
-                ref KeyPointer<TPKey> queryKeyPointer = ref KeyPointer<TPKey>.CastFromPhysicalAddress(foundPhysicalAddress);
-                foundLogicalAddress = queryKeyPointer.PreviousAddress;
+                ref KeyPointer<TPKey> storedKeyPointer = ref KeyPointer<TPKey>.CastFromPhysicalAddress(foundPhysicalAddress);
+                foundLogicalAddress = storedKeyPointer.PreviousAddress;
             }
             foundPhysicalAddress = core.Constants.kInvalidAddress;
             return false;
@@ -331,9 +331,6 @@ namespace FASTER.libraries.SubsetIndex
                 if (logicalAddress >= hlog.BeginAddress)
                 {
                     InsertTrace($" {logicalAddress}");
-
-                    if (logicalAddress < hlog.BeginAddress)
-                        continue;
 
                     if (logicalAddress >= hlog.HeadAddress)
                     {
@@ -441,9 +438,10 @@ namespace FASTER.libraries.SubsetIndex
 
                     // Success for this Predicate.
                     IndexTraceLine(" ins");
-                    hlog.GetInfo(newPhysicalAddress).Invalid = false;
                 }
 
+                // Success for all Predicates. Clear the invalid bit.
+                hlog.GetInfo(newPhysicalAddress).Invalid = false;
                 storedCompositeKey.ClearUpdateFlags(this.KeyAccessor.KeyCount, this.KeyAccessor.KeyPointerSize);
                 status = OperationStatus.SUCCESS;
                 goto LatchRelease;

@@ -4,7 +4,7 @@
     <TargetFrameworks>net461;netstandard2.0;netstandard2.1</TargetFrameworks>
     <Platforms>AnyCPU;x64</Platforms>
     <LangVersion>8</LangVersion>
-    <PackageId>Microsoft.FASTER</PackageId>
+    <PackageId>Microsoft.FASTER.Core</PackageId>
     <PackageOutputPath>$(SolutionDir)\build_output\packages</PackageOutputPath>
   </PropertyGroup>
 
