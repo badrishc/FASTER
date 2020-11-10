@@ -117,15 +117,9 @@ namespace FASTER.indexes.SubsetIndex
             Debug.Assert(!this.fkv.CopyReadsToTail, "Liveness check should not copy pending reads to the tail of the log");
             Debug.Assert(this.fkv.RecordAccessor.IsReadCacheAddress(logicalAddress), "Liveness check SingleWriter() should be called only when copying pending reads to the readcache");
             var log = this.fkv.readcache;
-            if (log is GenericAllocator<TKVKey, TKVValue>) {  // TODO is there a cleaner way to do this?
-                dst = src;
-            } else
-            {
-                Debug.Assert(log is BlittableAllocator<TKVKey, TKVValue> || log is GenericAllocator<TKVKey, TKVValue>);
-                long physicalAddress = log.GetPhysicalAddress(logicalAddress & ~Constants.kReadCacheBitMask);
-                unsafe { Debug.Assert((long)Unsafe.AsPointer(ref dst) == (long)Unsafe.AsPointer(ref log.GetValue(physicalAddress))); }
-                log.Serialize(ref src, physicalAddress);
-            }
+            long physicalAddress = log.GetPhysicalAddress(logicalAddress & ~Constants.kReadCacheBitMask);
+            unsafe { Debug.Assert((long)Unsafe.AsPointer(ref dst) == (long)Unsafe.AsPointer(ref log.GetValue(physicalAddress))); }
+            log.Serialize(ref src, physicalAddress);
         }
 
         #endregion Supported IFunctions operations
