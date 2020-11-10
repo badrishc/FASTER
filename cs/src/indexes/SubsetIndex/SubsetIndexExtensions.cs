@@ -122,39 +122,39 @@ namespace FASTER.indexes.SubsetIndex
         /// For performance reasons, please use FasterKVForSI&lt;Key, Value&gt;.For(functions).NewSession&lt;Functions&gt;(...) instead of this overload.
         /// </summary>
         /// <param name="fkv">The <see cref="FasterKV{TKVKey, TKVValue}"/> instance.</param>
-        /// <param name="functions">Callback functions</param>
+        /// <param name="userFunctions">The user's callback functions</param>
         /// <param name="sessionId">ID/name of session (auto-generated if not provided)</param>
         /// <param name="threadAffinitized">For advanced users. Specifies whether session holds the thread epoch across calls. Do not use with async code.
         ///     Ensure thread calls session Refresh periodically to move the system epoch forward.</param>
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
         public static ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>> NewSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext>(
-                this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> functions, string sessionId = null,
+                this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> userFunctions, string sessionId = null,
                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).NewSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(functions), sessionId, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetForSI(fkv).NewSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(userFunctions), sessionId, threadAffinitized, sessionVariableLengthStructSettings);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session with advanced functions.
         /// For performance reasons, please use FasterKVForSI&lt;Key, Value&gt;.For(functions).NewSession&lt;Functions&gt;(...) instead of this overload.
         /// </summary>
         /// <param name="fkv">The <see cref="FasterKV{TKVKey, TKVValue}"/> instance.</param>
-        /// <param name="functions">Callback functions</param>
+        /// <param name="userFunctions">The user's callback functions</param>
         /// <param name="sessionId">ID/name of session (auto-generated if not provided)</param>
         /// <param name="threadAffinitized">For advanced users. Specifies whether session holds the thread epoch across calls. Do not use with async code.
         ///     Ensure thread calls session Refresh periodically to move the system epoch forward.</param>
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
         public static ClientSessionForSI<TKVKey, TKVValue, Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>> NewSessionForSI<TKVKey, TKVValue, Input, Output, Context>(
-                this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions, string sessionId = null,
+                this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions, string sessionId = null,
                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, Input> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).InternalNewSessionForSI<Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>>(functions, sessionId, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetForSI(fkv).InternalNewSessionForSI<Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>>(userFunctions, sessionId, threadAffinitized, sessionVariableLengthStructSettings);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session.
         /// For performance reasons, please use FasterKVForSI&lt;Key, Value&gt;.For(functions).ResumeSessionForSI&lt;Functions&gt;(...) instead of this overload.
         /// </summary>
         /// <param name="fkv">The <see cref="FasterKV{TKVKey, TKVValue}"/> instance.</param>
-        /// <param name="functions">Callback functions</param>
+        /// <param name="userFunctions">The user's callback functions</param>
         /// <param name="sessionId">ID/name of session (auto-generated if not provided)</param>
         /// <param name="commitPoint">Prior commit point of durability for session</param>
         /// <param name="threadAffinitized">For advanced users. Specifies whether session holds the thread epoch across calls. Do not use with async code.
@@ -162,16 +162,16 @@ namespace FASTER.indexes.SubsetIndex
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
         public static ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>> ResumeSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext>(
-                this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> functions, string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
+                this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> userFunctions, string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).ResumeSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(functions), sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetForSI(fkv).ResumeSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(userFunctions), sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session with advanced functions.
         /// For performance reasons, please use FasterKVForSI&lt;Key, Value&gt;.For(functions).NewSession&lt;Functions&gt;(...) instead of this overload.
         /// </summary>
         /// <param name="fkv">The <see cref="FasterKV{TKVKey, TKVValue}"/> instance.</param>
-        /// <param name="functions">Callback functions</param>
+        /// <param name="userFunctions">The user's callback functions</param>
         /// <param name="sessionId">ID/name of session (auto-generated if not provided)</param>
         /// <param name="commitPoint">Prior commit point of durability for session</param>
         /// <param name="threadAffinitized">For advanced users. Specifies whether session holds the thread epoch across calls. Do not use with async code.
@@ -179,9 +179,9 @@ namespace FASTER.indexes.SubsetIndex
         /// <param name="sessionVariableLengthStructSettings">Session-specific variable-length struct settings</param>
         /// <returns>Session instance</returns>
         public static ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>> ResumeSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext>(
-                this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> functions, string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
+                this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> userFunctions, string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).InternalResumeSessionForSI<TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>>(functions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetForSI(fkv).InternalResumeSessionForSI<TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>>(userFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
 
         #endregion New Session operations
 

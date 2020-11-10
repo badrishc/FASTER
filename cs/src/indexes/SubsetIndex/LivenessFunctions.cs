@@ -3,6 +3,7 @@
 
 using FASTER.core;
 using FASTER.libraries.SubsetIndex;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace FASTER.indexes.SubsetIndex
@@ -79,7 +80,7 @@ namespace FASTER.indexes.SubsetIndex
 
         #region Supported IFunctions operations
 
-        public virtual void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
+        public void ConcurrentReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
         {
             if (input.logAccessor is {})
                 output.SetHeapContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
@@ -89,7 +90,7 @@ namespace FASTER.indexes.SubsetIndex
                 output.currentAddress = logicalAddress;
         }
 
-        public virtual void SingleReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
+        public void SingleReader(ref TKVKey key, ref Input input, ref TKVValue value, ref Output output, long logicalAddress)
         {
             if (input.logAccessor is {})
                 output.SetHeapContainers(input.logAccessor.GetKeyContainer(ref key), input.logAccessor.GetValueContainer(ref value));
@@ -99,7 +100,7 @@ namespace FASTER.indexes.SubsetIndex
                 output.currentAddress = logicalAddress;
         }
 
-        public virtual void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
+        public void ReadCompletionCallback(ref TKVKey key, ref Input input, ref Output output, Context ctx, Status status, RecordInfo recordInfo)
         {
             // If ctx is null, this was an async call, and we'll get output via Complete().
             if (ctx is {})
@@ -109,10 +110,22 @@ namespace FASTER.indexes.SubsetIndex
             }
         }
 
-        public virtual void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)
+        public void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)
         {
-            // This is called when the primary FKV copies reads from IO to the read cache or tail of the log.
-            this.fkv.hlog.ShallowCopy(ref src, ref dst);
+            // For reads, this is called when the primary FKV copies reads from IO to the read cache (Liveness only uses ReadAtAddress variants,
+            // which set pendingContext.ReadAtAddress, which bypasses copying pending reads to the tail of the log).
+            Debug.Assert(!this.fkv.CopyReadsToTail, "Liveness check should not copy pending reads to the tail of the log");
+            Debug.Assert(this.fkv.RecordAccessor.IsReadCacheAddress(logicalAddress), "Liveness check SingleWriter() should be called only when copying pending reads to the readcache");
+            var log = this.fkv.readcache;
+            if (log is GenericAllocator<TKVKey, TKVValue>) {  // TODO is there a cleaner way to do this?
+                dst = src;
+            } else
+            {
+                Debug.Assert(log is BlittableAllocator<TKVKey, TKVValue> || log is GenericAllocator<TKVKey, TKVValue>);
+                long physicalAddress = log.GetPhysicalAddress(logicalAddress & ~Constants.kReadCacheBitMask);
+                unsafe { Debug.Assert((long)Unsafe.AsPointer(ref dst) == (long)Unsafe.AsPointer(ref log.GetValue(physicalAddress))); }
+                log.Serialize(ref src, physicalAddress);
+            }
         }
 
         #endregion Supported IFunctions operations
@@ -120,17 +133,17 @@ namespace FASTER.indexes.SubsetIndex
         #region Unsupported IAdvancedFunctions operations
         const string errorMsg = "This IAdvancedFunctions method should not be called in this context";
 
-        public virtual bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
+        public bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
 
-        public virtual void InitialUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
-        public virtual bool NeedCopyUpdate(ref TKVKey key, ref Input input, ref TKVValue value) => throw new InternalErrorExceptionSI(errorMsg);
-        public virtual void CopyUpdater(ref TKVKey key, ref Input input, ref TKVValue oldValue, ref TKVValue newValue, long oldLogicalAddress, long newLogicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
-        public virtual bool InPlaceUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
+        public void InitialUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
+        public bool NeedCopyUpdate(ref TKVKey key, ref Input input, ref TKVValue value) => throw new InternalErrorExceptionSI(errorMsg);
+        public void CopyUpdater(ref TKVKey key, ref Input input, ref TKVValue oldValue, ref TKVValue newValue, long oldLogicalAddress, long newLogicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
+        public bool InPlaceUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
 
-        public virtual void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, Status status) => throw new InternalErrorExceptionSI(errorMsg);
-        public virtual void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx) => throw new InternalErrorExceptionSI(errorMsg);
-        public virtual void DeleteCompletionCallback(ref TKVKey key, Context ctx) => throw new InternalErrorExceptionSI(errorMsg);
-        public virtual void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) => throw new InternalErrorExceptionSI(errorMsg);
+        public void RMWCompletionCallback(ref TKVKey key, ref Input input, Context ctx, Status status) => throw new InternalErrorExceptionSI(errorMsg);
+        public void UpsertCompletionCallback(ref TKVKey key, ref TKVValue value, Context ctx) => throw new InternalErrorExceptionSI(errorMsg);
+        public void DeleteCompletionCallback(ref TKVKey key, Context ctx) => throw new InternalErrorExceptionSI(errorMsg);
+        public void CheckpointCompletionCallback(string sessionId, CommitPoint commitPoint) => throw new InternalErrorExceptionSI(errorMsg);
         #endregion Unsupported IAdvancedFunctions operations
     }
 }

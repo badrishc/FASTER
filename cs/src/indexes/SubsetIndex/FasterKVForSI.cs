@@ -68,23 +68,23 @@ namespace FASTER.indexes.SubsetIndex
 
         #endregion Unavailable New Session Operations
 
-        internal ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> InternalNewSessionForSI<TInput, TOutput, TContext, Functions>(Functions functions, string sessionId = null, 
+        internal ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> InternalNewSessionForSI<TInput, TOutput, TContext, Functions>(Functions userFunctions, string sessionId = null, 
                                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, TInput> variableLengthStruct = null)
             where Functions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, base.RecordAccessor, this.SubsetIndex);
+            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(userFunctions, this.Log, base.RecordAccessor, this.SubsetIndex);
             var fkvSession = base.For(indexingFunctions).NewSession(indexingFunctions, sessionId, threadAffinitized, variableLengthStruct);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this);
             var livenessSession = base.NewSession(livenessFunctions);
             return new ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(this, indexingFunctions, fkvSession, fkvSession.SupportAsync, livenessSession, this.SubsetIndex);
         }
 
-        internal ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> InternalResumeSessionForSI<TInput, TOutput, TContext, Functions>(Functions functions,
+        internal ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, Functions> InternalResumeSessionForSI<TInput, TOutput, TContext, Functions>(Functions userFunctions,
                                 string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
                                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
             where Functions : IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>
         {
-            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(functions, this.Log, base.RecordAccessor, this.SubsetIndex);
+            var indexingFunctions = new IndexingFunctions<TKVKey, TKVValue, TInput, TOutput, TContext, Functions>(userFunctions, this.Log, base.RecordAccessor, this.SubsetIndex);
             var session = base.For(indexingFunctions).ResumeSession(indexingFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
             var livenessFunctions = new LivenessFunctions<TKVKey, TKVValue>(this);
             var livenessSession = base.NewSession(livenessFunctions);
