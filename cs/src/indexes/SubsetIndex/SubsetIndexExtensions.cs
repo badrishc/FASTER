@@ -28,7 +28,7 @@ namespace FASTER.indexes.SubsetIndex
                 VariableLengthStructSettings<TKVKey, TKVValue> variableLengthStructSettings = null) 
             => new FasterKVForSI<TKVKey, TKVValue>(size, logSettings, checkpointSettings, serializerSettings, comparer, variableLengthStructSettings);
 
-        private static FasterKVForSI<TKVKey, TKVValue> GetForSI<TKVKey, TKVValue>(this FasterKV<TKVKey, TKVValue> fkv)
+        private static FasterKVForSI<TKVKey, TKVValue> GetFKVForSI<TKVKey, TKVValue>(this FasterKV<TKVKey, TKVValue> fkv)
             => fkv is FasterKVForSI<TKVKey, TKVValue> fkvSi ? fkvSi : throw new FasterException("Instance is not a FasterKVForSI<TKVKey, TKVValue>");
 
         #region Predicate Registration API
@@ -46,7 +46,7 @@ namespace FASTER.indexes.SubsetIndex
         public static IPredicate Register<TKVKey, TKVValue, TPKey>(this FasterKV<TKVKey, TKVValue> fkv, RegistrationSettings<TPKey> registrationSettings,
                                          FasterKVPredicateDefinition<TKVKey, TKVValue, TPKey> def)
             where TPKey : struct
-            => GetForSI(fkv).SubsetIndex.Register(registrationSettings, def);
+            => GetFKVForSI(fkv).SubsetIndex.Register(registrationSettings, def);
 
         /// <summary>
         /// Register multiple <see cref="Predicate{TPKey, TRecordId}"/>s with a vector of definitions.
@@ -61,7 +61,7 @@ namespace FASTER.indexes.SubsetIndex
         public static IPredicate[] Register<TKVKey, TKVValue, TPKey>(this FasterKV<TKVKey, TKVValue> fkv, RegistrationSettings<TPKey> registrationSettings,
                                            params FasterKVPredicateDefinition<TKVKey, TKVValue, TPKey>[] defs)
             where TPKey : struct
-            => GetForSI(fkv).SubsetIndex.Register(registrationSettings, defs);
+            => GetFKVForSI(fkv).SubsetIndex.Register(registrationSettings, defs);
 
         /// <summary>
         /// Register a <see cref="Predicate{TPKey, TRecordId}"/> with a simple definition.
@@ -77,7 +77,7 @@ namespace FASTER.indexes.SubsetIndex
         public static IPredicate Register<TKVKey, TKVValue, TPKey>(this FasterKV<TKVKey, TKVValue> fkv, RegistrationSettings<TPKey> registrationSettings,
                                          string predName, Func<TKVKey, TKVValue, TPKey?> predFunc)
             where TPKey : struct
-            => GetForSI(fkv).SubsetIndex.Register(registrationSettings, new FasterKVPredicateDefinition<TKVKey, TKVValue, TPKey>(predName, predFunc));
+            => GetFKVForSI(fkv).SubsetIndex.Register(registrationSettings, new FasterKVPredicateDefinition<TKVKey, TKVValue, TPKey>(predName, predFunc));
 
         /// <summary>
         /// Register a <see cref="Predicate{TPKey, TRecordId}"/> with a simple definition.
@@ -92,7 +92,7 @@ namespace FASTER.indexes.SubsetIndex
         public static IPredicate[] Register<TKVKey, TKVValue, TPKey>(this FasterKV<TKVKey, TKVValue> fkv, RegistrationSettings<TPKey> registrationSettings,
                                            params (string name, Func<TKVKey, TKVValue, TPKey?> func)[] predFuncs)
             where TPKey : struct
-            => GetForSI(fkv).SubsetIndex.Register(registrationSettings, predFuncs.Select(e => new FasterKVPredicateDefinition<TKVKey, TKVValue, TPKey>(e.name, e.func)).ToArray());
+            => GetFKVForSI(fkv).SubsetIndex.Register(registrationSettings, predFuncs.Select(e => new FasterKVPredicateDefinition<TKVKey, TKVValue, TPKey>(e.name, e.func)).ToArray());
 
         #endregion Predicate Registration API
 
@@ -105,7 +105,7 @@ namespace FASTER.indexes.SubsetIndex
         /// <returns></returns>
         public static ClientSessionBuilderForSI<TKVKey, TKVValue, Input, Output, Context> ForSI<TKVKey, TKVValue, Input, Output, Context>(
                 this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, Input, Output, Context> functions)
-            => new ClientSessionBuilderForSI<TKVKey, TKVValue, Input, Output, Context>(GetForSI(fkv), functions);
+            => new ClientSessionBuilderForSI<TKVKey, TKVValue, Input, Output, Context>(GetFKVForSI(fkv), functions);
 
         /// <summary>
         /// Helper method to specify callback function instance along with Input, Output and Context types for advanced client sessions
@@ -115,7 +115,7 @@ namespace FASTER.indexes.SubsetIndex
         /// <returns></returns>
         public static AdvancedClientSessionBuilderForSI<TKVKey, TKVValue, Input, Output, Context> ForSI<TKVKey, TKVValue, Input, Output, Context>(
                 this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> functions) 
-            => new AdvancedClientSessionBuilderForSI<TKVKey, TKVValue, Input, Output, Context>(GetForSI(fkv), functions);
+            => new AdvancedClientSessionBuilderForSI<TKVKey, TKVValue, Input, Output, Context>(GetFKVForSI(fkv), functions);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session.
@@ -131,7 +131,7 @@ namespace FASTER.indexes.SubsetIndex
         public static ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>> NewSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext>(
                 this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> userFunctions, string sessionId = null,
                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).NewSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(userFunctions), sessionId, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetFKVForSI(fkv).NewSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(userFunctions), sessionId, threadAffinitized, sessionVariableLengthStructSettings);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session with advanced functions.
@@ -147,7 +147,7 @@ namespace FASTER.indexes.SubsetIndex
         public static ClientSessionForSI<TKVKey, TKVValue, Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>> NewSessionForSI<TKVKey, TKVValue, Input, Output, Context>(
                 this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context> userFunctions, string sessionId = null,
                 bool threadAffinitized = false, SessionVariableLengthStructSettings<TKVValue, Input> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).InternalNewSessionForSI<Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>>(userFunctions, sessionId, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetFKVForSI(fkv).InternalNewSessionForSI<Input, Output, Context, IAdvancedFunctions<TKVKey, TKVValue, Input, Output, Context>>(userFunctions, sessionId, threadAffinitized, sessionVariableLengthStructSettings);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session.
@@ -164,7 +164,7 @@ namespace FASTER.indexes.SubsetIndex
         public static ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>> ResumeSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext>(
                 this FasterKV<TKVKey, TKVValue> fkv, IFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> userFunctions, string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).ResumeSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(userFunctions), sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetFKVForSI(fkv).ResumeSessionForSI(new BasicFunctionsWrapper<TKVKey, TKVValue, TInput, TOutput, TContext>(userFunctions), sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
 
         /// <summary>
         /// Start a new SubsetIndex-enabled client session wrapper around a FASTER client session with advanced functions.
@@ -181,7 +181,7 @@ namespace FASTER.indexes.SubsetIndex
         public static ClientSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>> ResumeSessionForSI<TKVKey, TKVValue, TInput, TOutput, TContext>(
                 this FasterKV<TKVKey, TKVValue> fkv, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext> userFunctions, string sessionId, out CommitPoint commitPoint, bool threadAffinitized = false,
                 SessionVariableLengthStructSettings<TKVValue, TInput> sessionVariableLengthStructSettings = null)
-            => GetForSI(fkv).InternalResumeSessionForSI<TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>>(userFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
+            => GetFKVForSI(fkv).InternalResumeSessionForSI<TInput, TOutput, TContext, IAdvancedFunctions<TKVKey, TKVValue, TInput, TOutput, TContext>>(userFunctions, sessionId, out commitPoint, threadAffinitized, sessionVariableLengthStructSettings);
 
         #endregion New Session operations
 
@@ -195,7 +195,7 @@ namespace FASTER.indexes.SubsetIndex
         public static void Flush<TKVKey, TKVValue>(this FasterKV<TKVKey, TKVValue> fkv, bool wait)
         {
             fkv.Log.Flush(wait);
-            GetForSI(fkv).SubsetIndex.Flush(wait);
+            GetFKVForSI(fkv).SubsetIndex.Flush(wait);
         }
 
         /// <summary>
@@ -206,7 +206,7 @@ namespace FASTER.indexes.SubsetIndex
         public static void FlushAndEvict<TKVKey, TKVValue>(this FasterKV<TKVKey, TKVValue> fkv, bool wait)
         {
             fkv.Log.FlushAndEvict(wait);
-            GetForSI(fkv).SubsetIndex.FlushAndEvict(wait);
+            GetFKVForSI(fkv).SubsetIndex.FlushAndEvict(wait);
         }
 
         /// <summary>
@@ -217,7 +217,7 @@ namespace FASTER.indexes.SubsetIndex
         public static void DisposeFromMemory<TKVKey, TKVValue>(this FasterKV<TKVKey, TKVValue> fkv)
         {
             fkv.Log.DisposeFromMemory();
-            GetForSI(fkv).SubsetIndex.DisposeFromMemory();
+            GetFKVForSI(fkv).SubsetIndex.DisposeFromMemory();
         }
 
         #endregion Flush implementations

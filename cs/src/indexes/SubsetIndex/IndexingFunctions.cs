@@ -64,7 +64,7 @@ namespace FASTER.indexes.SubsetIndex
             // For all these cases, we have no oldAddress to do an RCU, so we simply insert a new record.
 
             // Skip writes to the read cache.
-            if (!this.recordAccessor.IsLogAddress(logicalAddress))
+            if (!this.recordAccessor.IsValid(logicalAddress))
                 return;
 
             // In all non-readcache cases, the record should be in the primary FKV.Log memory.

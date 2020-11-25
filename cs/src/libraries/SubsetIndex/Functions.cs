@@ -79,10 +79,10 @@ namespace FASTER.libraries.SubsetIndex
 
             public unsafe void SingleReader(ref TPKey queryKeyPointerRefAsKeyRef, ref Input input, ref TRecordId value, ref Output output, long logicalAddress)
             {
-                if (!recordAccessor.IsLogAddress(logicalAddress))
+                if (!recordAccessor.IsValid(logicalAddress))
                 {
                     // This is a ReadCache record. Note if we do support ReadCache in SubsetIndex secondary KVs: ReadCompletionCallback won't be called, so no need to flag it in Output.
-                    Debug.Fail("ReadCache is not supported in SubsetIndex secondary KVs");
+                    Debug.Fail(recordAccessor.IsReadCacheAddress(logicalAddress) ? "ReadCache is not supported in SubsetIndex secondary KVs" : "Invalid logicalAddress");
                     return;
                 }
 

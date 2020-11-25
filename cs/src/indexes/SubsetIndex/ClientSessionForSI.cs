@@ -68,7 +68,7 @@ namespace FASTER.indexes.SubsetIndex
                 // the liveness loop, and if the record is live, we'll return the key and value this call obtains.
                 var input = new LivenessFunctions<TKVKey, TKVValue>.Input { logAccessor = this.fkvLogAccessor };
 
-                Status status = this.fkvLivenessSession.ReadAtAddress(logicalAddress, ref input, ref context.output, context);
+                Status status = this.fkvLivenessSession.ReadAtAddress(logicalAddress, ref input, ref context.output, ReadFlags.SkipReadCache, context);
                 if (status == Status.PENDING)
                 {
                     this.fkvLivenessSession.CompletePending(spinWait: true);
@@ -84,21 +84,14 @@ namespace FASTER.indexes.SubsetIndex
 
                 while (true)
                 {
-                    status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, ref recordInfo, context);
+                    status = this.fkvLivenessSession.Read(ref context.output.GetKey(), ref input, ref context.output, ref recordInfo, ReadFlags.SkipReadCache, context);
                     if (status == Status.PENDING)
                     {
                         this.fkvLivenessSession.CompletePending(spinWait: true);
                         status = context.PendingResultStatus;
                     }
 
-                    if (status != Status.OK)
-                        return null;
-                    if (this.fkvRecordAccessor.IsReadCacheAddress(context.output.currentAddress))
-                    {
-                        recordInfo.PreviousAddress = context.output.currentAddress;
-                        continue;
-                    }
-                    if (context.output.currentAddress != logicalAddress)
+                    if (status != Status.OK || context.output.currentAddress != logicalAddress)
                         return null;
 
                     context.output.DetachHeapContainers(out IHeapContainer<TKVKey> keyContainer, out IHeapContainer<TKVValue> valueContainer);
@@ -128,7 +121,7 @@ namespace FASTER.indexes.SubsetIndex
             {
                 //  We ignore the updated previousAddress here; we're just looking for the key.
                 Status status;
-                var readAsyncResult = await fkvLivenessSession.ReadAtAddressAsync(logicalAddress, ref input, default, cancellationToken: querySettings.CancellationToken);
+                var readAsyncResult = await fkvLivenessSession.ReadAtAddressAsync(logicalAddress, ref input, ReadFlags.SkipReadCache, default, cancellationToken: querySettings.CancellationToken);
                 if (querySettings.IsCanceled)
                     return null;
                 (status, initialOutput) = readAsyncResult.Complete();
@@ -142,20 +135,13 @@ namespace FASTER.indexes.SubsetIndex
 
                 while (true)
                 {
-                    readAsyncResult = await this.fkvLivenessSession.ReadAsync(ref initialOutput.GetKey(), ref input, recordInfo.PreviousAddress, default, cancellationToken:querySettings.CancellationToken);
+                    readAsyncResult = await this.fkvLivenessSession.ReadAsync(ref initialOutput.GetKey(), ref input, recordInfo.PreviousAddress, ReadFlags.SkipReadCache, default, cancellationToken:querySettings.CancellationToken);
                     if (querySettings.IsCanceled)
                         return null;
                     LivenessFunctions<TKVKey, TKVValue>.Output output = default;
                     (status, output) = readAsyncResult.Complete(out recordInfo);
 
-                    if (status != Status.OK)
-                        return null;
-                    if (this.fkvRecordAccessor.IsReadCacheAddress(output.currentAddress))
-                    {
-                        recordInfo.PreviousAddress = output.currentAddress;
-                        continue;
-                    }
-                    if (output.currentAddress != logicalAddress)
+                    if (status != Status.OK || output.currentAddress != logicalAddress)
                         return null;
 
                     if (status != Status.OK || output.currentAddress != logicalAddress)
@@ -781,17 +767,17 @@ namespace FASTER.indexes.SubsetIndex
         }
 
         /// <inheritdoc/>
-        public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, ref RecordInfo recordInfo, TContext userContext = default, long serialNo = 0)
+        public Status Read(ref TKVKey key, ref TInput input, ref TOutput output, ref RecordInfo recordInfo, ReadFlags readFlags = ReadFlags.None, TContext userContext = default, long serialNo = 0)
         {
             EnterIndexableOperation(IndexableOperation.Read);
-            return this.fkvSession.Read(ref key, ref input, ref output, ref recordInfo, userContext, serialNo);
+            return this.fkvSession.Read(ref key, ref input, ref output, ref recordInfo, readFlags, userContext, serialNo);
         }
 
         /// <inheritdoc/>
-        public Status ReadAtAddress(long address, ref TInput input, ref TOutput output, TContext userContext = default, long serialNo = 0)
+        public Status ReadAtAddress(long address, ref TInput input, ref TOutput output, ReadFlags readFlags = ReadFlags.None, TContext userContext = default, long serialNo = 0)
         {
             EnterIndexableOperation(IndexableOperation.Read);
-            return this.fkvSession.ReadAtAddress(address, ref input, ref output, userContext, serialNo);
+            return this.fkvSession.ReadAtAddress(address, ref input, ref output, readFlags, userContext, serialNo);
         }
 
         /// <inheritdoc/>
@@ -823,16 +809,17 @@ namespace FASTER.indexes.SubsetIndex
         }
 
         /// <inheritdoc/>
-        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, ref TInput input, long startAddress, TContext userContext = default,
-                                                                                                                         long serialNo = 0, CancellationToken cancellationToken = default)
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAsync(ref TKVKey key, ref TInput input, long startAddress, ReadFlags readFlags = ReadFlags.None,
+                                                                                                          TContext userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
         {
             EnterIndexableOperation(IndexableOperation.Read);
-            return this.fkvSession.ReadAsync(ref key, ref input, startAddress, userContext, serialNo, cancellationToken);
+            return this.fkvSession.ReadAsync(ref key, ref input, startAddress, readFlags, userContext, serialNo, cancellationToken);
         }
 
         /// <inheritdoc/>
-        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAtAddressAsync(long address, ref TInput input, TContext userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
-            => this.fkvSession.ReadAtAddressAsync(address, ref input, userContext, serialNo, cancellationToken);
+        public ValueTask<FasterKV<TKVKey, TKVValue>.ReadAsyncResult<TInput, TOutput, TContext>> ReadAtAddressAsync(long address, ref TInput input, ReadFlags readFlags = ReadFlags.None, 
+                                                                                                                   TContext userContext = default, long serialNo = 0, CancellationToken cancellationToken = default)
+            => this.fkvSession.ReadAtAddressAsync(address, ref input, readFlags, userContext, serialNo, cancellationToken);
 
         /// <inheritdoc/>
         public Status Upsert(ref TKVKey key, ref TKVValue desiredValue, TContext userContext = default, long serialNo = 0)

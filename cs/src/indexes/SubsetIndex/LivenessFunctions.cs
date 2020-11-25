@@ -110,24 +110,13 @@ namespace FASTER.indexes.SubsetIndex
             }
         }
 
-        public void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress)
-        {
-            // For reads, this is called when the primary FKV copies reads from IO to the read cache (Liveness only uses ReadAtAddress variants,
-            // which set pendingContext.ReadAtAddress, which bypasses copying pending reads to the tail of the log).
-            Debug.Assert(!this.fkv.CopyReadsToTail, "Liveness check should not copy pending reads to the tail of the log");
-            Debug.Assert(this.fkv.RecordAccessor.IsReadCacheAddress(logicalAddress), "Liveness check SingleWriter() should be called only when copying pending reads to the readcache");
-            var log = this.fkv.readcache;
-            long physicalAddress = log.GetPhysicalAddress(logicalAddress & ~Constants.kReadCacheBitMask);
-            unsafe { Debug.Assert((long)Unsafe.AsPointer(ref dst) == (long)Unsafe.AsPointer(ref log.GetValue(physicalAddress))); }
-            log.Serialize(ref src, physicalAddress);
-        }
-
         #endregion Supported IFunctions operations
 
         #region Unsupported IAdvancedFunctions operations
         const string errorMsg = "This IAdvancedFunctions method should not be called in this context";
 
         public bool ConcurrentWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
+        public void SingleWriter(ref TKVKey key, ref TKVValue src, ref TKVValue dst, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
 
         public void InitialUpdater(ref TKVKey key, ref Input input, ref TKVValue value, long logicalAddress) => throw new InternalErrorExceptionSI(errorMsg);
         public bool NeedCopyUpdate(ref TKVKey key, ref Input input, ref TKVValue value) => throw new InternalErrorExceptionSI(errorMsg);
