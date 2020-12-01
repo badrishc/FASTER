@@ -5,7 +5,7 @@ using FASTER.core;
 
 namespace SubsetIndexSample
 {
-    public struct CountBinKey : IFasterEqualityComparer<CountBinKey>
+    public struct CountBinKey
     {
         internal const int BinSize = 100;
         internal const int MaxOrders = BinSize * 10;
@@ -24,9 +24,12 @@ namespace SubsetIndexSample
             return bin < LastBin;
         }
 
-        // Make the hashcode for this distinct from size enum values
-        public long GetHashCode64(ref CountBinKey key) => Utility.GetHashCode(key.Bin + 1000);
+        public class Comparer : IFasterEqualityComparer<CountBinKey>
+        {
+            // Make the hashcode for this distinct from size enum values
+            public long GetHashCode64(ref CountBinKey key) => Utility.GetHashCode(key.Bin + 1000);
 
-        public bool Equals(ref CountBinKey k1, ref CountBinKey k2) => k1.Bin == k2.Bin;
+            public bool Equals(ref CountBinKey k1, ref CountBinKey k2) => k1.Bin == k2.Bin;
+        }
     }
 }

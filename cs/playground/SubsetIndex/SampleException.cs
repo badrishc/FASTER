@@ -6,7 +6,7 @@ using System;
 namespace SubsetIndexSample
 {
     /// <summary>
-    /// FASTER exception base type
+    /// Sample exception base type
     /// </summary>
     public class SampleException : Exception
     {

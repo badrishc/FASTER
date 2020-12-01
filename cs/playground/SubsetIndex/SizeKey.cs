@@ -5,7 +5,7 @@ using FASTER.core;
 
 namespace SubsetIndexSample
 {
-    public struct SizeKey : IFasterEqualityComparer<SizeKey>
+    public struct SizeKey
     {
         // Colors, strings, and enums are not blittable so we use int
         public int SizeInt;
@@ -14,8 +14,11 @@ namespace SubsetIndexSample
 
         public override string ToString() => ((Constants.Size)this.SizeInt).ToString();
 
-        public long GetHashCode64(ref SizeKey key) => Utility.GetHashCode(key.SizeInt);
+        public class Comparer : IFasterEqualityComparer<SizeKey>
+        {
+            public long GetHashCode64(ref SizeKey key) => Utility.GetHashCode(key.SizeInt);
 
-        public bool Equals(ref SizeKey k1, ref SizeKey k2) => k1.SizeInt == k2.SizeInt;
+            public bool Equals(ref SizeKey k1, ref SizeKey k2) => k1.SizeInt == k2.SizeInt;
+        }
     }
 }

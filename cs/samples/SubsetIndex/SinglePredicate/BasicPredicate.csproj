@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <RootNamespace>BasicPredicateSample</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\core\FASTER.core.csproj" />
+    <ProjectReference Include="..\..\..\src\indexes\SubsetIndex\FASTER.indexes.SubsetIndex.csproj" />
+    <ProjectReference Include="..\..\..\src\libraries\SubsetIndex\FASTER.libraries.SubsetIndex.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\Common\Common.projitems" Label="Shared" />
+
+</Project>

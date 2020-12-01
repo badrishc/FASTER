@@ -6,7 +6,7 @@ using System.Drawing;
 
 namespace SubsetIndexSample
 {
-    public struct ColorKey : IFasterEqualityComparer<ColorKey>
+    public struct ColorKey
     {
         // Colors, strings, and enums are not blittable so we use int
         public int ColorArgb;
@@ -15,8 +15,11 @@ namespace SubsetIndexSample
 
         public override string ToString() => Constants.ColorDict[this.ColorArgb].Name;
 
-        public long GetHashCode64(ref ColorKey key) => Utility.GetHashCode(key.ColorArgb);
+        public class Comparer : IFasterEqualityComparer<ColorKey>
+        {
+            public long GetHashCode64(ref ColorKey key) => Utility.GetHashCode(key.ColorArgb);
 
-        public bool Equals(ref ColorKey k1, ref ColorKey k2) => k1.ColorArgb == k2.ColorArgb;
+            public bool Equals(ref ColorKey k1, ref ColorKey k2) => k1.ColorArgb == k2.ColorArgb;
+        }
     }
 }

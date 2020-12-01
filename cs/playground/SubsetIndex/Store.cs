@@ -36,16 +36,16 @@ namespace SubsetIndexSample
             if (SubsetIndexApp.useMultiGroups)
             {
                 var groupOrdinal = 0;
-                this.SizePred = FasterKV.Register(CreateRegistrationSettings<SizeKey>(groupOrdinal++), nameof(this.SizePred),
+                this.SizePred = FasterKV.Register(CreateRegistrationSettings(groupOrdinal++, new SizeKey.Comparer()), nameof(this.SizePred),
                                                     (k, v) => new SizeKey((Constants.Size)v.SizeInt));
-                this.ColorPred = FasterKV.Register(CreateRegistrationSettings<ColorKey>(groupOrdinal++), nameof(this.ColorPred),
+                this.ColorPred = FasterKV.Register(CreateRegistrationSettings(groupOrdinal++, new ColorKey.Comparer()), nameof(this.ColorPred),
                                                     (k, v) => new ColorKey(Constants.ColorDict[v.ColorArgb]));
-                this.CountBinPred = FasterKV.Register(CreateRegistrationSettings<CountBinKey>(groupOrdinal++), nameof(this.CountBinPred),
+                this.CountBinPred = FasterKV.Register(CreateRegistrationSettings(groupOrdinal++, new CountBinKey.Comparer()), nameof(this.CountBinPred),
                                                     (k, v) => CountBinKey.GetAndVerifyBin(v.Count, out int bin) ? new CountBinKey(bin) : (CountBinKey?)null);
             }
             else
             {
-                var preds = FasterKV.Register(CreateRegistrationSettings<CombinedKey>(0),
+                var preds = FasterKV.Register(CreateRegistrationSettings(0, new CombinedKey.Comparer()),
                                                 new (string, Func<Key, TValue, CombinedKey?>)[]
                                                 {
                                                     (nameof(this.SizePred), (k, v) => new CombinedKey((Constants.Size)v.SizeInt)),
@@ -59,13 +59,14 @@ namespace SubsetIndexSample
             }
         }
 
-        RegistrationSettings<TKey> CreateRegistrationSettings<TKey>(int groupOrdinal)
+        RegistrationSettings<TKey> CreateRegistrationSettings<TKey>(int groupOrdinal, IFasterEqualityComparer<TKey> keyComparer)
         {
             var regSettings = new RegistrationSettings<TKey>
             {
                 HashTableSize = 1L << LogFiles.HashSizeBits,
                 LogSettings = this.logFiles.GroupLogSettings[groupOrdinal],
                 CheckpointSettings = new CheckpointSettings(),  // TODO checkpoints
+                KeyComparer = keyComparer,
                 IPU1CacheSize = 0,          // TODO IPUCache
                 IPU2CacheSize = 0
             };

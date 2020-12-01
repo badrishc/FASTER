@@ -200,7 +200,7 @@ namespace FASTER.libraries.SubsetIndex
             var pred = iPred as Predicate<TPKey, TRecordId>;
             Guid id = default;
             if (pred is null || !this.predicateNames.TryGetValue(pred.Name, out id) || id != pred.Id)
-                throw new ArgumentExceptionSI($"The Predicate {pred.Name} with Id {(pred is null ? "(unavailable)" : id.ToString())} is not registered with this FasterKV.");
+                throw new ArgumentExceptionSI($"The Predicate {iPred.Name} with Id {(pred is null ? "(unavailable)" : id.ToString())} is not registered with this FasterKV.");
             return pred;
         }
 

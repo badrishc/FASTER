@@ -6,8 +6,9 @@ using System.Drawing;
 
 namespace SubsetIndexSample
 {
-    public struct CombinedKey : IFasterEqualityComparer<CombinedKey>
+    public struct CombinedKey
     {
+        // Colors, strings, and enums are not blittable so we use int
         public int ValueType;
         public int ValueInt;
 
@@ -42,10 +43,11 @@ namespace SubsetIndexSample
             };
         }
 
-        public long GetHashCode64(ref CombinedKey key) 
-            => (long)key.ValueType << 32 | (uint)key.ValueInt.GetHashCode();
+        public class Comparer : IFasterEqualityComparer<CombinedKey>
+        {
+            public long GetHashCode64(ref CombinedKey key) => Utility.GetHashCode((long)key.ValueType << 32 | (uint)key.ValueInt);
 
-        public bool Equals(ref CombinedKey k1, ref CombinedKey k2) 
-            => k1.ValueType == k2.ValueType && k1.ValueInt == k2.ValueInt;
+            public bool Equals(ref CombinedKey k1, ref CombinedKey k2) => k1.ValueType == k2.ValueType && k1.ValueInt == k2.ValueInt;
+        }
     }
 }

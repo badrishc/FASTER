@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>efa19cad-a5f1-4778-a135-d92b09eac5fd</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>SubsetIndexSampleCommon</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)AgeKey.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)AgeOrPetKey.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Constants.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Functions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)IntKeyComparer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Key.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)LogFiles.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PetKey.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)StoreBase.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Value.cs" />
+  </ItemGroup>
+</Project>

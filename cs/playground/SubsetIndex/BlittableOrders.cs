@@ -2,8 +2,6 @@
 // Licensed under the MIT license.
 
 using FASTER.core;
-using System;
-using System.Diagnostics;
 
 namespace SubsetIndexSample
 {

@@ -4,7 +4,7 @@
 using FASTER.core;
 using System.IO;
 
-namespace SubsetIndexSample
+namespace SubsetIndexSampleCommon
 {
     class LogFiles
     {
@@ -24,25 +24,23 @@ namespace SubsetIndexSample
         private const int SegmentSizeBits = 25;
         private const int PageSizeBits = 20;
 
-        internal LogFiles(int numGroups)
+        internal LogFiles(int numGroups, string appName)
         {
-            this.LogDir = Path.Combine(Path.GetTempPath(), this.GetType().Namespace);
+            this.LogDir = Path.Combine(Path.GetTempPath(), appName);
 
             // Create files for storing data. We only use one write thread to avoid disk contention.
             // We set deleteOnClose to true, so logs will auto-delete on completion.
             this.log = Devices.CreateLogDevice(Path.Combine(this.LogDir, "hlog.log"), deleteOnClose: true);
-            if (SubsetIndexApp.useObjectValues)
-                this.objLog = Devices.CreateLogDevice(Path.Combine(this.LogDir, "hlog.obj.log"), deleteOnClose: true);
 
-            this.LogSettings = new LogSettings 
+            this.LogSettings = new LogSettings
             {
                 LogDevice = log,
                 ObjectLogDevice = objLog,
                 MemorySizeBits = MemorySizeBits,
                 SegmentSizeBits = SegmentSizeBits,
                 PageSizeBits = PageSizeBits,
-                CopyReadsToTail = SubsetIndexApp.copyReadsToTail,
-                ReadCacheSettings = SubsetIndexApp.useReadCache ? new ReadCacheSettings { MemorySizeBits = MemorySizeBits, PageSizeBits = PageSizeBits } : null
+                CopyReadsToTail = false,
+                ReadCacheSettings = null
             };
 
             this.GroupDevices = new IDevice[numGroups];
