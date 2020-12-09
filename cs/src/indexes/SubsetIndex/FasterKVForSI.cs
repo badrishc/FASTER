@@ -93,7 +93,7 @@ namespace FASTER.indexes.SubsetIndex
 
         #endregion New Session Operations
 
-        #region Growth and Recovery
+        #region Growth, Checkpoint, and Recovery
 
         /// <inheritdoc/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -192,7 +192,7 @@ namespace FASTER.indexes.SubsetIndex
             await vt2;
         }
 
-        #endregion Growth and Recovery
+        #endregion Growth, Checkpoint, and Recovery
 
         /// <inheritdoc/>
         public override void Dispose() => base.Dispose();
