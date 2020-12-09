@@ -6,7 +6,7 @@ last_modified_at: 2020-12-08
 toc: true
 ---
 
-## SubsetIndex Overview: A Secondary Indexes With Nonunique Keys
+## A Secondary Index With Nonunique Keys
 The FASTER SubsetIndex is based upon the PSFs (Predicate Subset Functions) defined in the [FishStore](https://github.com/microsoft/FishStore) prototype; they allow defining predicates that records will match, possibly non-uniquely, for secondary indexing. The SubsetIndex is designed to be used by any data provider. Currently there is only an implementation using FasterKV as the provider, so this document will mostly focus on their use as a secondary index (implemented using "secondary FasterKVs") for a primary FasterKV store, with occasional commentary on other possible stores.
 
 Recall that FasterKV is essentially a hash table; as such, it has a single primary key for a given record, and there are zero or one records available for a given key.
