@@ -344,7 +344,7 @@ namespace FASTER.libraries.SubsetIndex
             }
         }
 
-#if NETSTANDARD21
+#if NETSTANDARD21  // TODO no longer needed when the latest upstream master is merged
         internal async IAsyncEnumerable<TRecordId> QueryAsync<TPKey>(ClientSessionSI<TProviderData, TRecordId> indexSession, IPredicate pred, TPKey key, QuerySettings querySettings)
             where TPKey : struct
         {

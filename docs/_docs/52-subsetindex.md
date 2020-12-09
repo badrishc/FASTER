@@ -42,7 +42,7 @@ This is the core FASTER assembly, and has no code that is specific to the Subset
 This can be thought of as an extension to core FASTER; it uses extension functions to provide the SubsetIndex functionality (this is described further below). It has no storage itself; rather, it is a redirection and coordination layer between `FASTER.core` and `FASTER.libraries.SubsetIndex`. It provides extension wrappers for:
   - Registering Predicate groups
   - Obtaining SubsetIndex-enabled new sessions (other sessions are not allowed)
-  - Providing wrappers for some FasterKV operations such as `Flush`, `Checkpoint`, `Recover` to coordinate with the SubsetIndex
+  - Providing wrappers for some FasterKV operations such as `Flush`, `Checkpoint`, and `Recover` to coordinate with the same operations on the SubsetIndex
   - Providing a session wrapper that:
     - Exposes all the usual `ClientSession` operations such as `Read`, `Upsert`, `RMW`, and `Delete`, wrapping them to keep the SubsetIndex updated.
     - Adds methods for querying Predicates singly or in groups
@@ -94,10 +94,10 @@ First obtain a SubsetIndex-enabled `FasterKV<K, V>` as described [above](#creati
 This `FasterKV<K, V>` instance enables `SubsetIndexExtensions.Register(...)` for registering the Predicate groups. Each `Register` call is forwarded to the [`SubsetIndex`](#public-subsetindex) implementation, which creates a [`Group`](#internal-group) internally; this `Group` contains its own `FasterKV` instance, using the Predicate Key type and a RecordId that is the logical address of the record in the Primary `FasterKV` for its Value. All non-null keys returned from the Predicate are linked in chains within that FasterKV instance. 
 
 There are a number of overloads of `Register` that take various forms of predicate specification:
-- Simple lambdas that merely return a property of the Value, or complex lambdas that calculate and return a Key type. Lambdas are wrapped in an instance of [`FasterKVPredicateDefinition`](#internal-fasterkvpredicatedefinition), wrapping the lambda in its delegate.
-- A [`FasterKVPredicateDefinition`](#internal-fasterkvpredicatedefinition) instance with the delegate already created.
+- Simple lambdas that merely return a property of the Value, or complex lambdas that calculate and return a Key type. Lambdas are wrapped in an instance of [`FasterKVPredicateDefinition`](#public-fasterkvpredicatedefinition), wrapping the lambda in its delegate.
+- A [`FasterKVPredicateDefinition`](#public-fasterkvpredicatedefinition) instance with the delegate already created.
 
-All `Predicate`s in a `Group` have the same Key type and same form for specifying the predicate logic (lambda vs. [`FasterKVPredicateDefinition`](#internal-fasterkvpredicatedefinition)). Creating Predicates in groups has the following advantages:
+All `Predicate`s in a `Group` have the same Key type and same form for specifying the predicate logic (lambda vs. [`FasterKVPredicateDefinition`](#public-fasterkvpredicatedefinition)). Creating Predicates in groups has the following advantages:
 - A single hashtable can be used for all Predicates in the group, using the ordinal of the Predicate as part of the hashing logic. This can save space.
 - Predicates should be registered in groups where it is expected that a record will match all or none of the Predicates (that is, if a record results in a non-null key for one Predicate in the group, it results in a non-null key for all Predicates in the group, and if a record results in a null key for one Predicate in the group, it results in a null key for all Predicates in the group). This saves some overhead in processing variable-length composite keys in the secondary FasterKV; this [KeyPointer](#the-structure-of-a-record-in-a-groups-fasterkv) structure is described more fully below.
 - All Predicates in a group have the same `TPKey` type, but different groups can have different `TPKey` types.
@@ -145,7 +145,7 @@ As discussed above, the `FASTER.libraries.SubsetIndex` API is intended to be use
 The `TRecordId` has a type constraint of being `struct`; it must be blittable.
 
 ### Re-Registering the SubsetIndex on `Recover`
-TODO: This section is not current
+TODO: This section is not current; code TBD
 [IFasterKV](../Interfaces/IFasterKV.cs) provides a `GetRegisteredPSFNames` method that returns the names of all PSFs that were registered. Another provider would have to expose similar functionality. At `Restore` time, before any operations are done on the Primary FasterKV, the aplication must call `RegisterPSF` on those names for those groups; it *must not* change a group definition by adding, removing, or supplying a different name or functionality (lambda or definition) for a PSF in the group; doing so will break access to existing records in the group.
 
 If an application creates a new version of a PSF, it should encode the version information into the PSF's name, e.g. "Dog v1.1". The application must keep track internally of all PSF names and functionality (lambda or definition) for any groups it has created.
@@ -177,7 +177,7 @@ This is a static C# extension class whose methods take a `FasterKV` instance as 
 
 `ClientSessionForSI` contains an internal `AdvancedClientSession` on the primary FasterKV; its Functions instance is an instance of the [`IndexingFunctions`](#internal-indexingfunctions) class, which implements `IAdvancedFunctions`. [`IndexingFunctions`](#internal-indexingfunctions) is the layer that manages data storage between the core FasterKV and the SubsetIndex, as well as containing the client Functions instance (wrapped in `BasicFunctionsWrapper` if it does not implement `IAdvancedFunctions`).
 
-`ClientSessionForSI` also holds an instance of `ClientSessionSI`, which is a "session" on the [`SubsetIndex`](#public-subsetindex) top-level object in the [SubsetIndex Implementation](#fasterlibrariessubsetindex-implementation) hierarchy.
+`ClientSessionForSI` also holds an instance of `ClientSessionSI`, which is a "session" on the [`SubsetIndex`](#public-subsetindex) top-level object in the [SubsetIndex Implementation](#fasterlibrariessubsetindex-implementation) hierarchy. This allows it to function as a "super-session", coordinating both the FasterKV session and the SubsetIndex session, so operations such as pending RMWs are consistent between the FasterKV and SubsetIndex.
 
 #### Data Update Operations
 The flow of operations through the `ClientSessionForSI` during a non-pending data-update operation is:
@@ -189,22 +189,57 @@ The flow of operations through the `ClientSessionForSI` during a non-pending dat
 
 In the event of pending data-update operations, the data is stored in a [`ChangeTracker`](#public-changetracker) instance during the completion callback, which [`IndexingFunctions`](#internal-indexingfunctions) stores in a queue. When the `ClientSessionForSI`'s `CompletePending` method is called, all enqueued [`ChangeTracker`](#public-changetracker) instances are retrieved and sent to the [`SubsetIndex`](#public-subsetindex) instance to update the index.
 
-#### Internal: `FasterKVPredicateDefinition`
-TODO
+#### Public: `FasterKVPredicateDefinition`
+Each [`SubsetIndex`](#public-subsetindex) client will have its own implementation of `IPredicateDefinition` to create the `Predicate` definition. For `FasterKV<K, V>`, that is `FasterKVPredicateDefinition`. This is one of the very few places where both the primary `FasterKV<K, V>`'s Key and the `Predicate`'s Key types are present.
+
+`FasterKVPredicateDefinition` carries the predicate to be executed, and has methods to perform that execution on the "provider data" (the stored data from the primary `FasterKV<K, V>`).
+
+##### Public: `FasterKVProviderData`
+Each [`SubsetIndex`](#public-subsetindex) client will have its own data provider specification. For `FasterKV<K, V>`, that is `FasterKVProviderData`. This carries the data from the primary `FasterKV<K, V>` operation. It uses the primary `FasterKV<K, V>`'s Key and Value types; it is unaware of the `Predicate`'s Key type.
 
 ### `FASTER.libraries.SubsetIndex` Implementation
 This assembly is the actual implementation of the SubsetIndex. This assembly uses the naming convention that a public subclass, wrapper class, or function is named the same as the corresponding FasterKV element, with the suffix `SI`.
 
 #### Public: `SubsetIndex`
-TODO
+This is the highest-level class in the hierarchy. It is the central point from which all group operations are initiated, both data updates and queries, and is the class that is instantiated by the caller to register `Predicate`s and create [`ClientSessionSI`](#public-clientsessionsi)s.
 
 #### Public: `ClientSessionSI`
+Similar to a `ClientSession` on a `FasterKV<K, V>`, the `ClientSessionSI` is a session on the SubsetIndex. This enables clean coordination between FasterKV and its SubsetIndex, in particular for pending operations; essentially, the `ClientSessionSI` is an extension of the [`ClientSessionForSI`](#public-clientsessionforsi) into the [`SubsetIndex`](#public-subsetindex).
+
+The `ClientSessionSI` holds a FasterKV session for each `Group`'s `FasterKV<K, V` instance. These provide the "endpoints" for [`ClientSessionForSI`](#public-clientsessionforsi) coordination of sessions with the primary `FasterKV<K, V>`.
+
+The `ClientSessionSI` includes methods for both data update operations and `Predicate` `Query` operations. It is a very thin wrapper for these, handing them off to [`SubsetIndex`](#public-subsetindex) with itself as the FasterKV session source.
+
+##### Data Update Flow
+When the `ClientSessionSI` receives a data update request, it calls appropriate methods on the [`SubsetIndex`](#public-subsetindex), which coordinates the operation across groups. Taking Upsert as an example:
+- `ClientSessionSI` calls the corresponding update method on [`SubsetIndex`](#public-subsetindex), passing itself as the source for the internal FasterKV `AdvancedClientSession`.
+- [`SubsetIndex`](#public-subsetindex) iterates its groups and for each group:
+  - Obtains the `AdvancedClientSession` for that `Group`'s FasterKV from the `ClientSessionSI`.
+  - Calls an update method on the `Group` (for Upsert, it is `ExecuteAndStore`).
+  - The `Group`:
+    - Executes the `Predicate` using the passed data from the primary `FasterKV<K, V>`.
+    - Determines what update operation must be done on the `AdvancedClientSession` for its contained `FasterKV<K, V>`.
+    - Calls that update method.
+
+##### Query Flow
+Queries are done at a per-`Predicate` level, again coordinated by the [`SubsetIndex`](#public-subsetindex). Similarly to data update operations, when the `ClientSessionSI` receives a query request, it calls appropriate methods on the [`SubsetIndex`](#public-subsetindex), which coordinates the operation across `Predicates`.
+
+Unlike `FasterKV<K, V>`'s Read operations, `Query` results are returned via `IEnumerable<>` or `IAsyncEnumerable<>`.
+The flow of a query is:
+- `ClientSessionSI` calls the corresponding query method on [`SubsetIndex`](#public-subsetindex), passing itself as the source for the internal FasterKV `AdvancedClientSession`.
+- [`SubsetIndex`](#public-subsetindex) opens an enumerable over each `Predicate` in the query. 
+  - The `Predicate` calls back to its `Group` to execute this query, passing the `AdvancedClientSession` for that group (obtained from the `ClientSessionSI`).
+- [`SubsetIndex`](#public-subsetindex) then passes these to a `QueryRecordIterator` instance, which coordinates the sorting and merging of the `TRecordId` streams, and finally issues the boolean lambda on each `TRecordId`.
 
 #### Internal: `Group`
-TODO
+A `Group` maintain the secondary `FasterKV<K, V>` that stores the index.
 
-#### The Structure of a Record in a `Group`'s FasterKV
-Each [`Group`](#internal-group) maintains a single FasterKV instance. The records in this FasterKV instance have the following structure:
+For a data update operation, it executes the `Predicate`, creates a `CompositeKey` of the Key data returned by the `Predicate`(s), and calls the appropriate update operation in the `FasterKV`.
+
+For a query operation, it issues the Read operation and traverses backward along the returned `KeyPointer` previous addresses.
+
+##### The Structure of a Record in a `Group`'s FasterKV
+The records in a `Group`'s FasterKV instance have the following structure:
 ![Record Structure](/FASTER/assets/subsetindex/record-structure.png "Record Structure")
 - The usual RecordInfo header. Note that its `PreviousAddress` is not used for `Predicate` key chaining.
 - A `CompositeKey` that consists of one or more `KeyPointer` structures (one for each `Predicate` in the `Group`).
@@ -225,9 +260,24 @@ Each [`Group`](#internal-group) maintains a single FasterKV instance. The record
 ![KeyPointer Chains](/FASTER/assets/subsetindex/keypointer-chains.png "KeyPointer Chains")
 
 #### Internal: `IndexingFunctions`
-TODO
+`IndexingFunctions` are the `IAdvancedFunctions` implementation held by the [`ClientSessionForSI`](#public-clientsessionforsi) opened on the primary `FasterKV<K, V>`.
+
+Its responsibility is:
+- Hold onto the users's `IAdvancedFunctions<>` object (or a `BasicFunctionsWrapper` around the user's `IFunctions<>` object), and call this object's callback methods when an `IndexingFunctions` callback is called by the primary `FasterKV<K, V>`.
+- Hold onto data sent to the callbacks, so they can later be sent to the [`SubsetIndex`](#public-subsetindex).
+  - For Upserts, a "fast path" is employed where no heap allocations are done. In this case, `IndexingFunctions` simply holds the logical address passed to the `SingleWriter` callback.
+    - When the Upsert is complete, [`ClientSessionForSI`](#public-clientsessionforsi) will call `Upsert` on the [`SubsetIndex`](#public-subsetindex), which calls `ExecuteAndStore` with this logicalAddress, bypassing the allocation of a [`ChangeTracker`](#public-changetracker).
+  - For other operations, `IndexingFunctions` creates and holds a [`ChangeTracker`](#public-changetracker).
+    - If the operation goes pending, then in the `*CompletionCallback` callback, `IndexingFunctions` places its [`ChangeTracker`](#public-changetracker) into a queue. In this way, multiple pending operations can be done.
+      - Because there a `IndexingFunctions` instance is created for each [`ClientSessionForSI`](#public-clientsessionforsi), and because sessions are single-threaded, so the use of instance data in the `IndexingFunctions` is safe.
+      - When one of the `CompletePending` calls is made on the [`ClientSessionForSI`](#public-clientsessionforsi), it will drain the [`ChangeTracker`](#public-changetracker) queue in `IndexingFunctions` and pass each [`ChangeTracker`](#public-changetracker) to the [`SubsetIndex`](#public-subsetindex) to be processed.
 
 #### Public: `ChangeTracker`
-TODO
+The `ChangeTracker` tracks changes data changes from the primary `FasterKV<K, V>` across all groups. It carries the data copied from the primary `FasterKV<K, V>` operation for application across groups. It also carries an indicator of which operation was done on the primary `FasterKV<K, V>`, as well as the Key data from `Predicate` execution.
 
+When a [`Group`](#internal-group) performs a data update operation, it executes its `Predicate`s on the `ChangeTracker`'s data to obtain the new keys and determines whether any Key data has changed for any `Predicate` (for an RMW, some `Predicate`'s may see changes while others do not; if no `Predicate` in the group reports a change, no index update is needed).
 
+The `ChangeTracker` carries both "BeforeData" (before an update was applied) and "AfterData" (after the update was applied, for applicable operations). Normally, the `ChangeTracker` carries only the data until the primary `FasterKV<K, V>` operation is complete. However, if the Value type in the primary `FasterKV` has objects, then an in-place RMW to the data in that object will also affect BeforeData, and thus "no changes" would erroneously be reported. Therefore, in this case the `Predicate`s are executed and their "Before" Key data stored *during the `FasterKV<K, V>` operation*, because that is the only time the Before data is available. This is done during primary `FasterKV<K, V>` epoch protection so should be as fast as possible. This is the only time [`SubsetIndex`](#public-subsetindex) operations are done during epoch protection of the primary `FasterKV<K, V>`.
+
+## Future Items
+- Add an "IPUCache". There are several places in the code that have a TODOcache label marking this, as well as some of the `KeyPointer` flags. TODO fill in details.

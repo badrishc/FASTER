@@ -182,7 +182,7 @@ namespace FASTER.indexes.SubsetIndex
         private void SetBeforeData(ref TKVKey key, ref TKVValue value, long logicalAddress, bool isIpu)
         {
             // If the value has objects, then an in-place RMW to the data in that object will also affect BeforeData, so we must execute the predicates now for IPU. // TODOperf this is in session lock
-            // TODOdoc: If you Read an object value and modify that fetched "ref value" directly, you will break the hash index (the before data is overwritten before we have
+            // If you Read an object value and modify that fetched "ref value" directly, you will break the hash index (the before data is overwritten before we have
             // a chance to see it and create the keys). An Upsert must use a separate value.
             this.ChangeTracker ??= this.subsetIndex.CreateChangeTracker();
             this.subsetIndex.SetBeforeData(this.ChangeTracker, CreateProviderData(ref key, ref value), logicalAddress, isIpu && this.recordAccessor.ValueHasObjects());
