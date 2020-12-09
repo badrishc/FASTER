@@ -69,7 +69,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SubsetIndex", "playground\S
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SubsetIndex", "SubsetIndex", "{ACF8DE56-12AC-4171-9D42-E9923F3B3802}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BasicPredicate", "samples\SubsetIndex\SinglePredicate\BasicPredicate.csproj", "{B549FD48-B0A2-428E-9F4C-9A1E176A507F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BasicPredicate", "samples\SubsetIndex\BasicPredicate\BasicPredicate.csproj", "{B549FD48-B0A2-428E-9F4C-9A1E176A507F}"
 EndProject
 Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Common", "samples\SubsetIndex\Common\Common.shproj", "{EFA19CAD-A5F1-4778-A135-D92B09EAC5FD}"
 EndProject
