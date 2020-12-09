@@ -6,19 +6,16 @@ last_modified_at: 2020-12-08
 toc: true
 ---
 
-## FASTER Subset Index User's Guide
+## SubsetIndex Overview: A Secondary Indexes With Nonunique Keys
 The FASTER SubsetIndex is based upon the PSFs (Predicate Subset Functions) defined in the [FishStore](https://github.com/microsoft/FishStore) prototype; they allow defining predicates that records will match, possibly non-uniquely, for secondary indexing. The SubsetIndex is designed to be used by any data provider. Currently there is only an implementation using FasterKV as the provider, so this document will mostly focus on their use as a secondary index (implemented using "secondary FasterKVs") for a primary FasterKV store, with occasional commentary on other possible stores.
 
-## FasterKV: Primary Index With Unique Keys
-FasterKV is essentially a hash table; as such, it has a single primary key for a given record, and there are zero or one records available for a given key.
-
+Recall that FasterKV is essentially a hash table; as such, it has a single primary key for a given record, and there are zero or one records available for a given key.
 - An Upsert (insert or blind update) will replace an identical key, or insert a new record if an exact key match is not found
 - An RMW (Read-Modify-Write) will find an exact key match and update the record, or insert a new record if an identical key match is not found
 - A Read will find either a single record matching the key, or no records
 
 The FasterKV Key and Value may be [blittable](https://docs.microsoft.com/en-us/dotnet/framework/interop/blittable-and-non-blittable-types) fixed-length, blittable variable length, or .NET objects.
 
-## SubsetIndex Overview: A Secondary Indexes With Nonunique Keys
 The FASTER SubsetIndex implements a secondary index by allowing the user to register one or more Predicates that return an alternate key for the record. For example, a record might be { Id: 42, Species: "cat" }. The "primary index" is the key inserted into the primary FasterKV; in this example it is Id, and there will be only one record with an Id of 42. A SubsetIndex might be created for such records by defining a Predicate that returns the Species property.
 
 ### Predicates
@@ -62,18 +59,18 @@ Because PSFs use hash indexes (and conceptually store multiple records for a giv
 #### Fixed-Length `TPKey`
 PSFs currently use fixed-length keys; the `TPKey` type returned by a PSF execution has a type constraint of being `struct`. It must be a blittable type; the PSF API does not provide for `IVariableLengthStruct` or `SerializerSettings`, nor does it accept strings as keys. Rather than passing a string, the caller must pass some sort of string identifier, such as a hash (but do not use string.GetHashCode() for this, because it is AppDomain-specific (and also dependent on .NET version)). In this case, the hashcode becomes a "bin" of all strings (or string prefixes) corresponding to that hash code.
 
-## Public API
+## FasterKV Client Public API
 This section discusses the SubsetIndex public API. As mentioned above, there are two levels: The interface for FASTER clients to add SubsetIndexing to their apps, and the interface for non-FASTER clients.
 
 ### FasterKV Client Changes to Use the SubsetIndex
 There are very few changes required to enable the SubsetIndex in a FasterKV app.
 
 <a name="creating-faster-for-si"></a>
-#### Creating a SubsetIndex-enabled Instance of FasterKV<K, V>
+#### Creating a SubsetIndex-enabled FasterKV
 A FASTER app that uses a SubsetIndex must not instantiate a `FasterKV<K, V>` directly; instead must obtain a SubsetIndex-enabled subclass using `SubsetIndexExtensions.NewFasterKV<K, V>(...)`. This returns an instance of `FasterKVForSI<K, V>`, which is an internal subclass of `FasterKV<K, V>`. Thus it is identical for non-SubsetIndex operations; the application talks to a `FasterKV<K, V>` instance as usual.
 
 <a name="creating-session-for-si"></a>
-#### Creating a SubsetIndex-enabled Session on FasterKV<K, V>
+#### Creating a SubsetIndex-enabled Session
 A FASTER app that uses a SubsetIndex must not use the `FasterKV<K, V>` methods for obtaining a session; instead it must call the `SubsetIndexExtensions` method `.ForSI` on the `FasterKVForSI<K, V>` to obtain a `ClientSessionForSI<I, O, C, F>` object. This does not inherit from `(Advanced)ClientSession` but presents an identical interface, including Read, Upsert, RMW, and Delete operations; internally it manages these calls to update both the primary `FasterKV<K, V>` and the SubsetIndex. 
 
 The SubsetIndex API to create a new session parallels that of the normal FasterKV API, but due to C# overloading rules, it is not possible to overload the `For` methods on return type. Therefore the name `ForSI` is used for the corresponding method that returns a new `ClientSessionBuilderForSI`; however, the usual NewSession naming is used on this object to obtain a `ClientSessionForSI`. An exception is thrown if `.For` is called on a `FasterKVForSI<K, V>` instance. This is one of the very few API differences in non-SubsetIndex operations.
@@ -85,21 +82,16 @@ FASTER provides two levels of example apps: `cs/samples` provides simple example
 For the SubsetIndex examples, an easy way to see the differences from a non-SubsetIndex FASTER app is to compare the sample apps in the `cs/samples/SubsetIndex` with other samples.
 
 Following are the SubsetIndex-specific examples.
+- The __`BasicPredicate`__ Sample App: This illustrates the simplest form of defining and querying a predicate, with the Predicate using a lambda that simply returns a property of the object rather than defining a key struct.
 
-#### The `BasicPredicate` Sample App
-This illustrates the simplest form of defining and querying a predicate, with the Predicate using a lambda that simply returns a property of the object rather than defining a key struct.
+- The __`SingleGroup`__ Sample App: This illustrates defining two Predicates in a single group, using a key struct that knows which property of the value it should use as the secondary key. It uses the synchronous `Query` method to illustrate simple boolean AND/OR operations.
 
-#### The `SingleGroup` Sample App
-This illustrates defining two Predicates in a single group, using a key struct that knows which property of the value it should use as the secondary key. It uses the synchronous `Query` method to illustrate simple boolean AND/OR operations.
+- The __`MultiGroup`__ Sample App: This illustrates defining two Predicates each in their own group, using two separate key structs, each dedicated to a single property of the value to be used as the secondary key. It uses the asynchronous `Query` method to illustrate simple boolean AND/OR operations.
 
-#### The `MultiGroup` Sample App
-This illustrates defining two Predicates each in their own group, using two separate key structs, each dedicated to a single property of the value to be used as the secondary key. It uses the asynchronous `Query` method to illustrate simple boolean AND/OR operations.
-
-#### The `SubsetIndex` Playground App
-The [SubsetIndex playground app](../../cs/playground/SubsetIndex/SubsetIndexApp.cs) app demonstrates much more comprehensive (and complex) registration and querying of the SubsetIndex, using all overloads of the `Query` API.
+- The __`SubsetIndex`__ Playground App: The [SubsetIndex playground app](../../cs/playground/SubsetIndex/SubsetIndexApp.cs) app demonstrates much more comprehensive (and complex) registration and querying of the SubsetIndex, using all overloads of the `Query` API.
 
 <a name="registering-si"></a>
-### Defining (Registering) the SubsetIndex on FasterKV<K, V>
+### Registering the SubsetIndex
 First obtain a SubsetIndex-enabled `FasterKV<K, V>` as described [above](#creating-faster-for-si).
 
 This `FasterKV<K, V>` instance enables `SubsetIndexExtensions.Register(...)` for registering the Predicate groups. Each `Register` call is forwarded to the [`SubsetIndex`](#subsetindex-object) implementation, which creates a [`Group`](#group-object) internally; this `Group` contains its own `FasterKV` instance, using the Predicate Key type and a RecordId that is the logical address of the record in the Primary `FasterKV` for its Value. All non-null keys returned from the Predicate are linked in chains within that FasterKV instance. 
@@ -113,13 +105,15 @@ All `Predicate`s in a `Group` have the same Key type and same form for specifyin
 - Predicates should be registered in groups where it is expected that a record will match all or none of the Predicates (that is, if a record results in a non-null key for one Predicate in the group, it results in a non-null key for all Predicates in the group, and if a record results in a null key for one Predicate in the group, it results in a null key for all Predicates in the group). This saves some overhead in processing variable-length composite keys in the secondary FasterKV; this [KeyPointer](#keypointer) structure is described more fully below.
 - All Predicates in a group have the same `TPKey` type, but different groups can have different `TPKey` types.
 
+`Groups` membership is immutable; they are defined on a single `Register` call, and `Predicates` cannot be added to or removed from a `Group`. Similarly, there is no method to remove a `Group`. A `Group` can in effect be dropped simply by not re-registering it when the FasterKV is recovered.
+
 #### How Predicates are Called
 For `VarLen` (variable-length blittable) types and large fixed-length blittable types, it is not feasible to pass the entire object; this is why "ref Key" and "ref Value" are prevalent in the `FasterKV<K, V>` API. Similarly, `Predicate` execution must take a "ref Key" and "ref Value". However, in many cases (such as [pending operations](#data-update-operations)), the SubsetIndex must store the Key and Value pass on the `FasterKV<K, V>` call, and eventually pass them to the `Predicate` call.
 
 Because of this, the SubsetIndex extension has a `FasterKVProviderData` which holds the Key and Value until it is ready to be executed. This execution happens in each [`Group`](#group-class) when [`ClientSessionForSI`](#clientsessionforsi-class) calls [`ClientSessionSI`](#clientsessionsi-class)'s update methods.
 
 <a name="updating-si"></a>
-### Updating the SubsetIndex Through Session Operations
+### Updating Data in the SubsetIndex
 A FASTER app that uses a SubsetIndex must not use the `FasterKV<K, V>` methods for obtaining a session; instead it must call the `SubsetIndexExtensions` method `.ForSI` on the `FasterKVForSI<K, V>` to obtain a [`ClientSessionForSI<I, O, C, F>`](#clientsessionforsi-class) object. This presents an identical interface to the `(Advanced)ClientSession` for Upsert, RMW, or Delete operations, but internally it passes these calls through to the same methods on its contained `(Advanced)ClientSession` instance, then calls the Upsert, Update, or Delete methods on the [`SubsetIndex`](#subsetindex-object) to update the index.
 
 When a record is inserted into the primary FasterKV (via Upsert or RMW), it is inserted at a unique "logical address" (essentially a page/offset combination). Predicates are used to implement secondary indexes in Faster by allowing the user to register a delegate that returns an alternate key for the record; then the logical address of the record in the primary FasterKV is the value that is inserted into the secondary FasterKV instance using the alternate key. This value is referred to as a RecordId; note that this is *not* the actual record value in the primary FasterKV, only its address. The type is termed `TRecordId` and for the primary FasterKV it is a long integer; other data providers may use a different type, as long as it is blittable.
@@ -147,7 +141,7 @@ Therefore, it is necessary that for each record returned by a SubsetIndex query,
 - The `ClientSessionForSI` contains a separate session whose Functions is an instance of `LivenessFunctions` (also implementing `IAdvancedFunctions`. Its purpose is to support issuing a ReadAtAddress on the primary `FasterKV<K, V>` using the returned `TRecordId` as its address, and store the Key.
 - Once the Key for the `TRecordId`'s address has been obtained, a Read is done on that Key to verify that the address returned is the same as the `TRecordId`. If it is not, then the record is no longer live, and it is not returned from the query.
 
-## Non-FasterKV Client API
+## Non-FasterKV Client Public API
 As discussed above, the `FASTER.libraries.SubsetIndex` API is intended to be used by any data provider needing a hash-based index that is capable of storing a `TRecordId` from which the provider can extract its full record. However, SubsetIndex update operations must be able to execute the Predicate, which requires knowledge of the provider's Key and Value types. Therefore, [`SubsetIndex`](../../cs/src/libraries/SubsetIndex/SubsetIndex.cs) has two generic types, both of which are opaque to the SubsetIndex:
 - `TProviderData`, which is the data passed to PSF execution (the PSF must, of course, know how to operate on the provider data and form a `TPKey` key from it)
 - `TRecordId`, which is the record identifier stored as the Value in the secondary FasterKV.
@@ -155,7 +149,7 @@ As discussed above, the `FASTER.libraries.SubsetIndex` API is intended to be use
 The `TRecordId` has a type constraint of being `struct`; it must be blittable.
 
 <a name="re-registering-si"></a>
-### Re-Registering SubsetIndex on `Restore`
+### Re-Registering the SubsetIndex on `Recover`
 TODO: This section is not current
 [IFasterKV](../Interfaces/IFasterKV.cs) provides a `GetRegisteredPSFNames` method that returns the names of all PSFs that were registered. Another provider would have to expose similar functionality. At `Restore` time, before any operations are done on the Primary FasterKV, the aplication must call `RegisterPSF` on those names for those groups; it *must not* change a group definition by adding, removing, or supplying a different name or functionality (lambda or definition) for a PSF in the group; doing so will break access to existing records in the group.
 
